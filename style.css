@@ -1,0 +1,171 @@
+/* style.css */
+body {
+    margin: 0;
+    font-family: 'Georgia', serif;
+    background: #f8f8f8;
+    color: #333;
+}
+
+@media (prefers-color-scheme: dark) {
+    body {
+        background: #121212;
+        color: #eee;
+    }
+}
+
+header {
+    text-align: center;
+    padding: 1rem;
+    background: #eee;
+    border-bottom: 1px solid #ddd;
+}
+
+@media (prefers-color-scheme: dark) {
+    header {
+        background: #1e1e1e;
+        border-bottom: 1px solid #444;
+    }
+}
+
+h1 {
+    margin: 0;
+    font-size: 2rem;
+}
+
+#mode-buttons button {
+    padding: 0.5rem 1rem;
+    margin: 0 0.5rem;
+    font-size: 1rem;
+    border: none;
+    background: #ddd;
+    cursor: pointer;
+}
+
+#mode-buttons button.active {
+    background: #007bff;
+    color: white;
+}
+
+.mode {
+    display: flex;
+    height: calc(100vh - 80px);
+}
+
+.hidden {
+    display: none !important;
+}
+
+#sidebar {
+    width: 300px;
+    padding: 1rem;
+    background: #eee;
+    overflow-y: auto;
+    border-right: 1px solid #ddd;
+}
+
+@media (prefers-color-scheme: dark) {
+    #sidebar {
+        background: #1e1e1e;
+        border-right: 1px solid #444;
+    }
+}
+
+#sidebar button {
+    display: block;
+    width: 100%;
+    margin: 0.5rem 0;
+    padding: 0.8rem;
+    font-size: 1rem;
+}
+
+#graph-container {
+    flex: 1;
+    position: relative;
+}
+
+#graphcanvas {
+    width: 100%;
+    height: 100%;
+    background: white;
+}
+
+@media (prefers-color-scheme: dark) {
+    #graphcanvas {
+        background: #222;
+    }
+}
+
+#player-mode {
+    padding: 2rem;
+    max-width: 800px;
+    margin: 0 auto;
+}
+
+#top-bar {
+    text-align: center;
+    margin-bottom: 2rem;
+}
+
+#top-bar button, #top-bar label {
+    margin: 0 0.5rem;
+    padding: 0.5rem 1rem;
+}
+
+#passage-text {
+    font-size: 1.2rem;
+    line-height: 1.8;
+    white-space: pre-line;
+    margin-bottom: 3rem;
+}
+
+#choices button {
+    display: block;
+    width: 100%;
+    margin: 1rem 0;
+    padding: 1rem;
+    font-size: 1.1rem;
+    background: #eee;
+    border: none;
+    cursor: pointer;
+}
+
+@media (prefers-color-scheme: dark) {
+    #choices button {
+        background: #333;
+    }
+}
+
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal-content {
+    background: white;
+    padding: 2rem;
+    max-width: 90%;
+    max-height: 90%;
+    overflow: auto;
+    position: relative;
+}
+
+@media (prefers-color-scheme: dark) {
+    .modal-content {
+        background: #222;
+    }
+}
+
+.close {
+    position: absolute;
+    top: 0.5rem;
+    right: 1rem;
+    font-size: 2rem;
+    cursor: pointer;
+}

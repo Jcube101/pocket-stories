@@ -1,0 +1,141 @@
+# story.yaml
+variables:
+  inventory:
+    key: false
+    sword: 0
+    potion: 0
+  relationships:
+    Alice: 0
+    Guard: 0
+  flags:
+    met_dragon: false
+    opened_gate: false
+
+passages:
+  start:
+    text: |
+      You wake up in a dark forest. Moonlight filters through the trees. You feel disoriented.
+
+      What do you do?
+    choices:
+      - text: "Follow the distant light"
+        target: clearing
+      - text: "Search your pockets"
+        target: pockets
+        condition: "inventory.key == false"
+
+  pockets:
+    text: |
+      You find an old key in your pocket. It looks important.
+    choices:
+      - text: "Continue to the light"
+        target: clearing
+        effect: "inventory.key = true"
+
+  clearing:
+    text: |
+      You emerge into a sunny clearing. A kind woman named Alice is gathering herbs.
+    choices:
+      - text: "Greet her warmly"
+        target: alice_friend
+        effect: "relationships.Alice += 3"
+      - text: "Ask for directions rudely"
+        target: alice_neutral
+        effect: "relationships.Alice -= 2"
+      - text: "Ignore her and look around"
+        target: clearing_look
+
+  clearing_look:
+    text: |
+      You notice a path leading to a castle in the distance.
+    choices:
+      - text: "Head to the castle"
+        target: castle_gate
+
+  alice_friend:
+    text: |
+      Alice smiles and offers you a healing potion. "You seem lost. Take this."
+    choices:
+      - text: "Thank her and accept"
+        target: clearing_look
+        effect: "inventory.potion += 1"
+      - text: "Decline politely"
+        target: clearing_look
+
+  alice_neutral:
+    text: |
+      Alice frowns but points to the castle path anyway.
+    choices:
+      - text: "Follow the path"
+        target: castle_gate
+
+  castle_gate:
+    text: |
+      A massive gate blocks the way to the castle. A guard stands watch.
+    choices:
+      - text: "Talk to the guard"
+        target: guard_talk
+      - text: "Try to open the gate with the key"
+        target: gate_open
+        condition: "inventory.key == true"
+
+  guard_talk:
+    text: |
+      The guard looks you over. "What business do you have?"
+    choices:
+      - text: "I'm here to slay the dragon"
+        target: guard_dragon
+      - text: "Lie and say you're expected"
+        target: guard_lie
+        effect: "relationships.Guard -= 2"
+
+  guard_dragon:
+    text: |
+      The guard laughs. "The dragon? Good luck. The gate is locked anyway."
+    choices:
+      - text: "Back"
+        target: castle_gate
+
+  guard_lie:
+    text: |
+      The guard doesn't believe you and draws his sword.
+    choices:
+      - text: "Fight"
+        target: bad_end_fight
+      - text: "Run away"
+        target: start
+
+  gate_open:
+    text: |
+      The key fits! The gate creaks open. You enter the castle courtyard.
+    choices:
+      - text: "Proceed inside"
+        target: dragon_chamber
+        effect: "flags.opened_gate = true"
+
+  dragon_chamber:
+    text: |
+      A huge dragon sleeps in the chamber, guarding treasure.
+    choices:
+      - text: "Sneak past"
+        target: good_end_treasure
+        condition: "relationships.Alice >= 3"
+      - text: "Wake the dragon and fight"
+        target: dragon_fight
+
+  dragon_fight:
+    text: |
+      You charge bravely... but the dragon breathes fire. You perish.
+    choices: []
+
+  good_end_treasure:
+    text: |
+      Thanks to Alice's friendship, you feel lucky. You grab the treasure and escape unharmed.
+
+      Congratulations! You win.
+    choices: []
+
+  bad_end_fight:
+    text: |
+      You are no match for the trained guard. Game over.
+    choices: []

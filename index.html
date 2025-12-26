@@ -1,0 +1,102 @@
+<!-- index.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pocket Stories</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://raw.githubusercontent.com/jagenjo/litegraph.js/master/css/litegraph.css">
+    <script src="https://raw.githubusercontent.com/jagenjo/litegraph.js/master/build/litegraph.js"></script>
+    <script src="https://raw.githubusercontent.com/nodeca/js-yaml/master/dist/js-yaml.min.js"></script>
+</head>
+<body>
+    <div id="app">
+        <header>
+            <h1>Pocket Stories</h1>
+            <div id="mode-buttons">
+                <button id="editor-btn" class="active">Editor Mode</button>
+                <button id="player-btn">Player Mode</button>
+            </div>
+        </header>
+
+        <div id="editor-mode" class="mode">
+            <div id="sidebar">
+                <h2>Global Variables</h2>
+                <div id="variables"></div>
+                <button id="add-var">Add Variable</button>
+
+                <h2>Tools</h2>
+                <button id="branching-script">View as Branching Script</button>
+                <button id="export-yaml">Export story.yaml</button>
+                <button id="play-story">Play Story</button>
+            </div>
+            <div id="graph-container">
+                <canvas id="graphcanvas"></canvas>
+            </div>
+        </div>
+
+        <div id="player-mode" class="mode hidden">
+            <div id="top-bar">
+                <button id="restart">Restart</button>
+                <button id="save-progress">Download Progress</button>
+                <label>
+                    Upload Progress
+                    <input type="file" id="load-progress" accept=".txt">
+                </label>
+                <button id="export-novel">Export as Novel</button>
+                <button id="back-editor">Back to Editor</button>
+            </div>
+            <div id="passage-container">
+                <div id="passage-text"></div>
+                <div id="choices"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal" class="modal hidden">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <pre id="modal-body"></pre>
+        </div>
+    </div>
+
+    <script src="editor.js"></script>
+    <script src="player.js"></script>
+    <script>
+        // Main app logic for mode switching
+        const editorMode = document.getElementById('editor-mode');
+        const playerMode = document.getElementById('player-mode');
+        const editorBtn = document.getElementById('editor-btn');
+        const playerBtn = document.getElementById('player-btn');
+
+        editorBtn.addEventListener('click', () => {
+            editorMode.classList.remove('hidden');
+            playerMode.classList.add('hidden');
+            editorBtn.classList.add('active');
+            playerBtn.classList.remove('active');
+        });
+
+        playerBtn.addEventListener('click', () => {
+            editorMode.classList.add('hidden');
+            playerMode.classList.remove('hidden');
+            editorBtn.classList.remove('active');
+            playerBtn.classList.add('active');
+            startPlayer(); // from player.js
+        });
+
+        document.getElementById('back-editor').addEventListener('click', () => {
+            editorBtn.click();
+        });
+
+        // Load initial story
+        fetch('story.yaml')
+            .then(r => r.text())
+            .then(text => {
+                window.storyData = jsyaml.load(text);
+                initEditor(); // from editor.js
+                initPlayer(); // from player.js
+            });
+    </script>
+</body>
+</html>
