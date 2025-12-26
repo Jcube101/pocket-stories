@@ -6,9 +6,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Pocket Stories</title>
     <link rel="stylesheet" href="style.css">
-    <link rel="stylesheet" href="https://raw.githubusercontent.com/jagenjo/litegraph.js/master/css/litegraph.css">
-    <script src="https://raw.githubusercontent.com/jagenjo/litegraph.js/master/build/litegraph.js"></script>
-    <script src="https://raw.githubusercontent.com/nodeca/js-yaml/master/dist/js-yaml.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/litegraph.js@0.7.18/css/litegraph.css">
+    <script src="https://cdn.jsdelivr.net/npm/litegraph.js@0.7.18/build/litegraph.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/js-yaml/4.1.0/js-yaml.min.js"></script>
 </head>
 <body>
     <div id="app">
@@ -30,6 +30,12 @@
                 <button id="branching-script">View as Branching Script</button>
                 <button id="export-yaml">Export story.yaml</button>
                 <button id="play-story">Play Story</button>
+
+                <h2>Import Story</h2>
+                <label class="file-upload-label">
+                    Load story.yaml
+                    <input type="file" id="load-story" accept=".yaml,.yml">
+                </label>
             </div>
             <div id="graph-container">
                 <canvas id="graphcanvas"></canvas>
@@ -93,9 +99,13 @@
         fetch('story.yaml')
             .then(r => r.text())
             .then(text => {
-                window.storyData = jsyaml.load(text);
-                initEditor(); // from editor.js
-                initPlayer(); // from player.js
+                window.storyData = jsyaml.load(text);  // ← correct global name
+                initEditor();
+                initPlayer();
+            })
+            .catch(err => {
+                console.error("Failed to load initial story.yaml", err);
+                alert("Could not load story.yaml — check console and network tab.");
             });
     </script>
 </body>

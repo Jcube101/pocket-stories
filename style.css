@@ -169,3 +169,23 @@ h1 {
     font-size: 2rem;
     cursor: pointer;
 }
+
+.file-upload-label {
+    display: block;
+    width: 100%;
+    margin: 0.5rem 0;
+    padding: 0.8rem;
+    text-align: center;
+    background: #eee;
+    cursor: pointer;
+}
+
+@media (prefers-color-scheme: dark) {
+    .file-upload-label {
+        background: #333;
+    }
+}
+
+.file-upload-label input {
+    display: none;
+}

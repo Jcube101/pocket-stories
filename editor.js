@@ -172,8 +172,8 @@ function exportStoryDataFromGraph() {
 
 function exportYAML() {
     exportStoryDataFromGraph();
-    const yaml = jsyaml.dump(window.storyData);
-    downloadFile("story.yaml", "text/yaml", yaml);
+    const yamlText = jsyaml.dump(window.storyData);  // ← correct: jsyaml.dump
+    downloadFile("story.yaml", "text/yaml", yamlText);
 }
 
 function generateBranchingScript() {
@@ -216,3 +216,59 @@ function downloadFile(filename, type, content) {
     a.download = filename;
     a.click();
 }
+// Allow importing a new story.yaml file
+document.getElementById('load-story').addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+        try {
+            const yamlText = ev.target.result;
+            const newData = jsyaml.load(yamlText);  // ← fixed here
+            
+            // Basic validation
+            if (!newData.passages || typeof newData.passages !== 'object') {
+                alert("Invalid story file: missing passages");
+                return;
+            }
+
+            // Update global story and variables
+            window.storyData = newData;
+            variables = JSON.parse(JSON.stringify(newData.variables || { inventory: {}, relationships: {}, flags: {} }));
+
+            // Rebuild the graph from scratch
+            graph.clear();
+            Object.keys(newData.passages).forEach(id => {
+                const p = newData.passages[id];
+                const node = LiteGraph.createNode("story/passage");
+                node.properties.id = id;
+                node.properties.text = (p.text || "").trim();
+                node.pos = [Math.random() * 500 + 100, Math.random() * 300 + 100];
+                graph.add(node);
+            });
+
+            // Reconnect choices
+            Object.keys(newData.passages).forEach(sourceId => {
+                const sourceNode = graph.findNodesByTitle(sourceId)[0];
+                if (!sourceNode || !newData.passages[sourceId].choices) return;
+                newData.passages[sourceId].choices.forEach(choice => {
+                    const targetNode = graph.findNodesByTitle(choice.target)[0];
+                    if (targetNode) {
+                        const link = sourceNode.connect(0, targetNode, 0);
+                        link.choiceText = choice.text || "";
+                        link.condition = choice.condition || "";
+                        link.effect = choice.effect || "";
+                    }
+                });
+            });
+
+            renderVariables();
+            alert("Story loaded successfully! Ready to edit or play.");
+        } catch (err) {
+            console.error(err);
+            alert("Failed to load story.yaml — check console for details");
+        }
+    };
+    reader.readAsText(file);
+});
