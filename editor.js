@@ -230,14 +230,11 @@ function createNode(id, text, index) {
             window.storyData.passages[id].position.x = newX;
             window.storyData.passages[id].position.y = newY;
 
-            // Also save to localStorage (for browser reloads without export)
+            // Fixed: save current position to localStorage
             const storyKey = 'pocketstories_layout_' + (window.storyData.title || 'untitled');
             const layout = JSON.parse(localStorage.getItem(storyKey) || '{}');
-            if (layout[id]) {
-                layout[newId] = layout[id];
-                delete layout[id];
-                localStorage.setItem(storyKey, JSON.stringify(layout));
-            }
+            layout[id] = { x: newX, y: newY };
+            localStorage.setItem(storyKey, JSON.stringify(layout));
 
             drawConnections();
             saveState(); // for undo/redo
@@ -255,14 +252,14 @@ function createNode(id, text, index) {
             delete window.storyData.passages[id];
             nodeDiv.dataset.id = newId;
             drawConnections();
-            saveState(); // ← add here
+            saveState();
         }
     });
 
     // Save text change
     nodeDiv.querySelector('.node-text').addEventListener('blur', e => {
         window.storyData.passages[id].text = e.target.textContent + "\n";
-        saveState(); // ← add here
+        saveState();
     });
 
     // Start connection on output
@@ -273,12 +270,12 @@ function createNode(id, text, index) {
 
     // Click to select node
     nodeDiv.addEventListener('click', e => {
-        if (e.target.isContentEditable) return; // don't select while editing text
+        if (e.target.isContentEditable) return;
         e.stopPropagation();
         if (selectedNode) selectedNode.classList.remove('selected');
         selectedNode = nodeDiv;
         nodeDiv.classList.add('selected');
-    });    
+    });
 
     nodesContainer.appendChild(nodeDiv);
 }
