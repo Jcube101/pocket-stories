@@ -7,10 +7,22 @@ let scale = 1;
 let isPanning = false;
 let panStart = { x: 0, y: 0 };
 let connectingFrom = null;
+let selectedNode = null;
+let selectedConnection = null; // not used yet, but preparing for future
 
 function initEditor() {
     nodesContainer = document.getElementById('nodes-container');
     svgCanvas = document.getElementById('svg-canvas');
+
+    // Deselect on canvas click
+    nodesContainer.addEventListener('click', e => {
+        if (e.target === nodesContainer || e.target === svgCanvas) {
+            if (selectedNode) {
+                selectedNode.classList.remove('selected');
+                selectedNode = null;
+            }
+        }
+    });
 
     // Clear previous content
     nodesContainer.innerHTML = '';
@@ -133,6 +145,15 @@ function createNode(id, text, index) {
         connectingFrom = nodeDiv;
     });
 
+    // Click to select node
+    nodeDiv.addEventListener('click', e => {
+        if (e.target.isContentEditable) return; // don't select while editing text
+        e.stopPropagation();
+        if (selectedNode) selectedNode.classList.remove('selected');
+        selectedNode = nodeDiv;
+        nodeDiv.classList.add('selected');
+    });    
+
     nodesContainer.appendChild(nodeDiv);
 }
 
@@ -154,6 +175,7 @@ document.addEventListener('mouseup', e => {
 });
 
 function drawConnections() {
+    // Clear everything except defs
     svgCanvas.innerHTML = `<defs>
         <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
             <path d="M0,0 L0,6 L9,3 z" fill="#666" />
@@ -163,34 +185,71 @@ function drawConnections() {
     Object.keys(window.storyData.passages).forEach(id => {
         const p = window.storyData.passages[id];
         if (!p.choices) return;
+
         const fromNode = document.querySelector(`.node[data-id="${id}"]`);
         if (!fromNode) return;
 
         const fromRect = fromNode.getBoundingClientRect();
-        const fromX = fromRect.right - nodesContainer.getBoundingClientRect().left;
-        const fromY = fromRect.top + fromRect.height / 2 - nodesContainer.getBoundingClientRect().top;
+        const containerRect = nodesContainer.getBoundingClientRect();
+        const fromX = (fromRect.right - containerRect.left) / scale - pan.x / scale;
+        const fromY = (fromRect.top + fromRect.height / 2 - containerRect.top) / scale - pan.y / scale;
 
-        p.choices.forEach(ch => {
+        p.choices.forEach((ch, choiceIndex) => {
             const toNode = document.querySelector(`.node[data-id="${ch.target}"]`);
             if (!toNode) return;
-            const toRect = toNode.getBoundingClientRect();
-            const toX = toRect.left - nodesContainer.getBoundingClientRect().left;
-            const toY = toRect.top + toRect.height / 2 - nodesContainer.getBoundingClientRect().top;
 
+            const toRect = toNode.getBoundingClientRect();
+            const toX = (toRect.left - containerRect.left) / scale - pan.x / scale;
+            const toY = (toRect.top + toRect.height / 2 - containerRect.top) / scale - pan.y / scale;
+
+            // Unique ID for this connection's path
+            const connId = `${id}-to-${ch.target}-${choiceIndex}`;
+
+            // Curved path (adjusted control points for smoother flow)
+            const midX = (fromX + toX) / 2;
+            const pathD = `M ${fromX} ${fromY} C ${fromX + 120} ${fromY} ${midX} ${toY} ${toX} ${toY}`;
+
+            // Hidden path for textPath reference
+            const defPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
+            defPath.id = `textpath-${connId}`;
+            defPath.setAttribute("d", pathD);
+            defPath.style.display = "none";
+            svgCanvas.appendChild(defPath);
+
+            // Visible connection path
             const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-            const d = `M${fromX},${fromY} C${fromX + 100},${fromY} ${toX - 100},${toY} ${toX},${toY}`;
-            path.setAttribute("d", d);
+            path.setAttribute("d", pathD);
             path.classList.add("connection-path");
+            path.setAttribute("marker-end", "url(#arrow)");
+            svgCanvas.appendChild(path);
+
+            // Label
+            let labelText = ch.text || "Continue";
+            if (ch.condition) labelText += ` [if ${ch.condition}]`;
+            if (ch.effect) labelText += ` [${ch.effect}]`;
+
+            const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+            const textPath = document.createElementNS("http://www.w3.org/2000/svg", "textPath");
+            textPath.setAttribute("href", `#textpath-${connId}`);
+            textPath.setAttribute("startOffset", "50%");
+            textPath.setAttribute("text-anchor", "middle");
+            textPath.textContent = labelText;
+            textPath.style.fontSize = "13px";
+            textPath.style.fill = "#374151";
+            text.appendChild(textPath);
+            svgCanvas.appendChild(text);
+
+            // Right-click to edit
             path.addEventListener('contextmenu', e => {
                 e.preventDefault();
-                const newText = prompt("Choice text", ch.text);
-                if (newText !== null) ch.text = newText;
+                const newText = prompt("Choice text", ch.text || "");
+                if (newText !== null) ch.text = newText || undefined;
                 const cond = prompt("Condition (optional)", ch.condition || "");
                 if (cond !== null) ch.condition = cond || undefined;
                 const eff = prompt("Effect (optional)", ch.effect || "");
                 if (eff !== null) ch.effect = eff || undefined;
+                drawConnections(); // refresh labels
             });
-            svgCanvas.appendChild(path);
         });
     });
 }
@@ -290,4 +349,36 @@ document.getElementById('load-story').addEventListener('change', e => {
         }
     };
     reader.readAsText(file);
+});
+
+// Keyboard shortcuts
+document.addEventListener('keydown', e => {
+    // Delete selected node
+    if ((e.key === 'Delete' || e.key === 'Backspace') && selectedNode) {
+        const id = selectedNode.dataset.id;
+        if (confirm(`Delete passage "${id}" and all connections to/from it?`)) {
+            delete window.storyData.passages[id];
+            // Remove incoming connections
+            Object.keys(window.storyData.passages).forEach(pid => {
+                if (window.storyData.passages[pid].choices) {
+                    window.storyData.passages[pid].choices = window.storyData.passages[pid].choices.filter(ch => ch.target !== id);
+                }
+            });
+            selectedNode.remove();
+            selectedNode = null;
+            drawConnections();
+        }
+    }
+
+    // Esc deselect
+    if (e.key === 'Escape' && selectedNode) {
+        selectedNode.classList.remove('selected');
+        selectedNode = null;
+    }
+
+    // Ctrl+S export
+    if (e.ctrlKey && e.key === 's') {
+        e.preventDefault();
+        exportYAML();
+    }
 });

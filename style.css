@@ -154,6 +154,15 @@ h1 {
     cursor: crosshair;
 }
 
+.node.selected {
+  box-shadow: 0 0 0 3px #4b5563; /* gray-600 ring */
+  z-index: 10;
+}
+
+.node.selected .node-title {
+  font-weight: 600;
+}
+
 .connection-path {
     fill: none;
     stroke: #666;
