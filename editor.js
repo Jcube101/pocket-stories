@@ -55,19 +55,6 @@ function initEditor() {
         }
     });
 
-    document.addEventListener('mousemove', e => {
-        if (isPanning) {
-            pan.x = e.clientX - panStart.x;
-            pan.y = e.clientY - panStart.y;
-            updateTransform();
-        }
-    });
-
-    document.addEventListener('mouseup', () => {
-        isPanning = false;
-        connectingFrom = null;
-    });
-
     // Wheel zoom (screen-centered, no drift)
     nodesContainer.addEventListener('wheel', e => {
         e.preventDefault();
@@ -115,13 +102,45 @@ function createNode(id, text, index) {
         <div class="node-output"></div>
     `;
 
-    // Drag node
+    // Drag node or start connection
     nodeDiv.addEventListener('mousedown', e => {
-        if (e.target.classList.contains('node-output')) {
-            connectingFrom = nodeDiv;
-        } else if (!e.target.isContentEditable) {
-            e.stopPropagation();
-        }
+    // Start connection from output port
+    if (e.target.classList.contains('node-output')) {
+        connectingFrom = nodeDiv;
+        e.stopPropagation();
+        return;
+    }
+
+    // Allow editing contenteditable fields
+    if (e.target.isContentEditable) return;
+
+    // Otherwise: start dragging the node
+    e.stopPropagation();
+
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const origX = parseFloat(nodeDiv.style.left);
+    const origY = parseFloat(nodeDiv.style.top);
+
+    nodeDiv.style.zIndex = 100; // bring to front
+
+    const onMouseMove = (moveEvent) => {
+        const dx = moveEvent.clientX - startX;
+        const dy = moveEvent.clientY - startY;
+        nodeDiv.style.left = `${origX + dx}px`;
+        nodeDiv.style.top = `${origY + dy}px`;
+        drawConnections(); // live update
+    };
+
+    const onMouseUp = () => {
+        document.removeEventListener('mousemove', onMouseMove);
+        document.removeEventListener('mouseup', onMouseUp);
+        nodeDiv.style.zIndex = ''; // reset
+        drawConnections(); // final redraw
+    };
+
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
     });
 
     // Save title change
