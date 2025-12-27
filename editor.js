@@ -18,14 +18,17 @@ function initEditor() {
     // Disable internal zoom to avoid any conflict/drift
     graphcanvas.allow_zoom = false;
 
-    // Custom wheel handler: smooth zoom centered on screen (eliminates any drift/pan during zoom)
+    // Smooth screen-centered wheel zoom with practical limits and finer steps
     graphcanvas.canvas.addEventListener("wheel", (e) => {
         e.preventDefault();
         e.stopImmediatePropagation();
 
-        const factor = e.deltaY < 0 ? 1.1 : 0.9;  // Scroll up = zoom in, down = zoom out
+        const factor = e.deltaY < 0 ? 1.15 : 0.87;  // Softer steps for finer control
         let newScale = graphcanvas.ds.scale * factor;
-        newScale = Math.max(0.1, Math.min(newScale, 5));
+        newScale = Math.max(0.5, Math.min(newScale, 1.2));  // Cap in at 1.2x, out at 0.5x for balanced view
+
+        // Practical bounds: never too small or too large
+        newScale = Math.max(0.3, Math.min(newScale, 1.5));
 
         const center = [graphcanvas.canvas.width / 2, graphcanvas.canvas.height / 2];
         graphcanvas.setZoom(newScale, center);
@@ -158,7 +161,9 @@ function initEditor() {
     const canvasCenter = () => [graphcanvas.canvas.width / 2, graphcanvas.canvas.height / 2];
 
     document.getElementById('zoom-in').addEventListener('click', () => {
-        graphcanvas.setZoom(graphcanvas.ds.scale * 1.2, canvasCenter());
+        let newScale = graphcanvas.ds.scale * 1.2;
+        newScale = Math.min(newScale, 1.5);
+        graphcanvas.setZoom(newScale, canvasCenter());
     });
 
     document.getElementById('zoom-out').addEventListener('click', () => {
@@ -169,43 +174,48 @@ function initEditor() {
         graphcanvas.setZoom(1.0, canvasCenter());
     });
 
-    // Improved Fit All — centered with generous padding
+    // "Fit to 4 Nodes" — comfortable default view showing ~4 nodes clearly
     document.getElementById('zoom-fit').addEventListener('click', () => {
         if (graph._nodes.length === 0) return;
 
-        let minX = Infinity, minY = Infinity;
-        let maxX = -Infinity, maxY = -Infinity;
+        // Approximate visible area after sidebar (~300px wide)
+        const visibleWidth = graphcanvas.canvas.width - 300;
+        const visibleHeight = graphcanvas.canvas.height;
 
-        graph._nodes.forEach(node => {
-            if (node.pos) {
-                minX = Math.min(minX, node.pos[0]);
-                minY = Math.min(minY, node.pos[1]);
-                maxX = Math.max(maxX, node.pos[0] + node.size[0]);
-                maxY = Math.max(maxY, node.pos[1] + node.size[1]);
-            }
-        });
+        // Target layout: roughly 2×2 grid of nodes with generous padding
+        const targetNodeWidth = 340;   // average node width + spacing
+        const targetNodeHeight = 240;  // average node height + spacing
+        const gridCols = 2;
+        const gridRows = 2;
 
-        const width = maxX - minX + 100;   // extra breathing room
-        const height = maxY - minY + 100;
+        const desiredWidth = targetNodeWidth * gridCols;
+        const desiredHeight = targetNodeHeight * gridRows;
 
-        const canvasW = graphcanvas.canvas.width;
-        const canvasH = graphcanvas.canvas.height;
-
-        // 15% padding on all sides
-        const scale = Math.min(
-            (canvasW * 0.85) / width,
-            (canvasH * 0.85) / height
+        // Scale to fit the 2×2 grid nicely within visible area
+        let scale = Math.min(
+            visibleWidth / desiredWidth,
+            visibleHeight / desiredHeight
         );
 
-        const finalScale = Math.min(scale, 1.0); // never zoom in past 100%
+        // Clamp to reasonable bounds (never too small or too large)
+        scale = Math.max(0.6, Math.min(scale, 1.0));
 
-        // Center calculation
+        // Center the entire graph
+        let minX = Infinity, minY = Infinity;
+        let maxX = -Infinity, maxY = -Infinity;
+        graph._nodes.forEach(node => {
+            minX = Math.min(minX, node.pos[0]);
+            minY = Math.min(minY, node.pos[1]);
+            maxX = Math.max(maxX, node.pos[0] + node.size[0]);
+            maxY = Math.max(maxY, node.pos[1] + node.size[1]);
+        });
+
         const centerX = minX + (maxX - minX) / 2;
         const centerY = minY + (maxY - minY) / 2;
-        const offsetX = canvasW / 2 - centerX * finalScale;
-        const offsetY = canvasH / 2 - centerY * finalScale;
+        const offsetX = visibleWidth / 2 - centerX * scale + 150;  // offset for sidebar
+        const offsetY = visibleHeight / 2 - centerY * scale;
 
-        graphcanvas.ds.scale = finalScale;
+        graphcanvas.ds.scale = scale;
         graphcanvas.ds.offset = [offsetX, offsetY];
         graphcanvas.setDirty(true, true);
     });

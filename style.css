@@ -208,3 +208,15 @@ h1 {
 #zoom-fit, #zoom-reset {
     font-size: 0.95rem;
 }
+
+.lg-node .lg-widget textarea, .lg-node .lg-widget input, .lg-node .lg-title {
+    font-size: 16px !important; /* Base readable size */
+    min-font-size: 12px !important; /* Prevent shrinking too much on zoom out */
+    font-weight: 500; /* Slight bold for clarity at distance */
+    line-height: 1.4; /* Better spacing for multiline text */
+}
+
+.lg-node {
+    min-width: 300px; /* Ensure nodes don't shrink too much */
+    min-height: 200px;
+}
