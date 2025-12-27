@@ -516,7 +516,6 @@ function generateBranchingScript() {
 }
 
 function showModal(content) {
-    // Create modal overlay
     const overlay = document.createElement('div');
     overlay.style.position = 'fixed';
     overlay.style.top = '0';
@@ -529,34 +528,36 @@ function showModal(content) {
     overlay.style.justifyContent = 'center';
     overlay.style.zIndex = '1000';
 
-    // Modal content
     const modal = document.createElement('div');
     modal.style.background = '#fff';
-    modal.style.padding = '20px';
-    modal.style.maxWidth = '80%';
-    modal.style.maxHeight = '80%';
+    modal.style.padding = '24px';
+    modal.style.maxWidth = '90%';
+    modal.style.maxHeight = '80vh';
     modal.style.overflow = 'auto';
-    modal.style.borderRadius = '8px';
-    modal.style.boxShadow = '0 4px 20px rgba(0,0,0,0.3)';
+    modal.style.borderRadius = '12px';
+    modal.style.boxShadow = '0 6px 30px rgba(0,0,0,0.4)';
 
     // Dark mode support
     if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
-        modal.style.background = '#222';
-        modal.style.color = '#eee';
+        modal.style.background = '#1f2937';
+        modal.style.color = '#f3f4f6';
     }
 
-    const pre = document.createElement('pre');
-    pre.textContent = content;
-    pre.style.whiteSpace = 'pre-wrap';
-    pre.style.fontSize = '14px';
-    pre.style.lineHeight = '1.5';
-    modal.appendChild(pre);
+    // Use innerHTML to render formatted content
+    const contentDiv = document.createElement('div');
+    contentDiv.innerHTML = content;
+    modal.appendChild(contentDiv);
 
     // Close button
     const closeBtn = document.createElement('button');
     closeBtn.textContent = 'Close';
     closeBtn.style.marginTop = '20px';
-    closeBtn.style.padding = '8px 16px';
+    closeBtn.style.padding = '10px 20px';
+    closeBtn.style.background = '#3b82f6';
+    closeBtn.style.color = 'white';
+    closeBtn.style.border = 'none';
+    closeBtn.style.borderRadius = '6px';
+    closeBtn.style.cursor = 'pointer';
     closeBtn.onclick = () => document.body.removeChild(overlay);
     modal.appendChild(closeBtn);
 
@@ -566,6 +567,74 @@ function showModal(content) {
 
     overlay.appendChild(modal);
     document.body.appendChild(overlay);
+}
+
+function validateStory() {
+    const issues = [];
+    const passages = window.storyData.passages;
+    const ids = Object.keys(passages);
+
+    // Missing start
+    if (!passages.start) {
+        issues.push("Missing 'start' passage");
+    }
+
+    // Duplicate IDs
+    const seen = new Set();
+    for (const id of ids) {
+        if (seen.has(id)) issues.push(`Duplicate passage ID: "${id}"`);
+        seen.add(id);
+    }
+
+    // Broken links
+    for (const id of ids) {
+        const p = passages[id];
+        if (p.choices) {
+            p.choices.forEach((ch, idx) => {
+                if (!passages[ch.target]) {
+                    issues.push(`Broken link: "${id}" choice #${idx + 1} → "${ch.target}" (missing)`);
+                }
+            });
+        }
+    }
+
+    // Unreachable passages (excluding start)
+    const reachable = new Set(['start']);
+    const queue = ['start'];
+    while (queue.length) {
+        const current = queue.shift();
+        const p = passages[current];
+        if (p && p.choices) {
+            p.choices.forEach(ch => {
+                if (!reachable.has(ch.target)) {
+                    reachable.add(ch.target);
+                    queue.push(ch.target);
+                }
+            });
+        }
+    }
+    for (const id of ids) {
+        if (id !== 'start' && !reachable.has(id)) {
+            issues.push(`Unreachable passage: "${id}"`);
+        }
+    }
+
+    // Report
+    if (issues.length === 0) {
+        showModal(`
+            <strong style="color:#10b981; font-size:1.2em">✓ All good!</strong>
+            <p style="margin-top:1em">Your story has no validation issues.</p>
+        `);
+    } else {
+        let html = `
+            <strong style="color:#ef4444; font-size:1.2em">⚠ Validation issues found (${issues.length})</strong>
+            <p style="margin:1em 0; color:#666">Fix these to ensure your story plays correctly:</p>
+            <ul style="text-align:left; margin:1em 0; padding-left:1.5em; line-height:1.6">
+        `;
+        issues.forEach(iss => html += `<li>${iss}</li>`);
+        html += `</ul>`;
+        showModal(html);
+    }
 }
 
 function expandCanvasIfNeeded() {
@@ -691,40 +760,38 @@ document.addEventListener('keydown', e => {
         redo();
     }
 });
-// One-time sidebar tool bindings with debug
+
+// One-time sidebar tool bindings (runs once, survives initEditor rebuilds)
+const btnValidate = document.getElementById('validate-story');
 const btnExport = document.getElementById('export-yaml');
 const btnBranching = document.getElementById('branching-script');
 const btnPlay = document.getElementById('play-story');
 const btnAddVar = document.getElementById('add-var');
 
+if (btnValidate) {
+    btnValidate.onclick = () => validateStory();
+} else {
+    console.warn('Button #validate-story not found');
+}
+
 if (btnExport) {
-    btnExport.onclick = () => {
-        console.log('Export YAML button clicked');
-        exportYAML();
-    };
+    btnExport.onclick = () => exportYAML();
 } else {
     console.warn('Button #export-yaml not found');
 }
 
 if (btnBranching) {
-    btnBranching.onclick = () => {
-        console.log('Branching script button clicked');
-        generateBranchingScript();
-    };
+    btnBranching.onclick = () => generateBranchingScript();
 } else {
     console.warn('Button #branching-script not found');
 }
 
 if (btnPlay) {
-    btnPlay.onclick = () => {
-        console.log('Play story button clicked');
-        document.getElementById('player-btn').click();
-    };
+    btnPlay.onclick = () => document.getElementById('player-btn').click();
 }
 
 if (btnAddVar) {
     btnAddVar.onclick = () => {
-        console.log('Add variable button clicked');
         const type = prompt("Type: inventory / relationships / flags");
         if (!["inventory", "relationships", "flags"].includes(type)) return;
         const name = prompt("Name");
