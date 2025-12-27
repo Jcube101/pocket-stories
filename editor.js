@@ -41,6 +41,7 @@ function initEditor() {
 
     // Draw connections
     drawConnections();
+    expandCanvasIfNeeded();  // ensure initial size is sufficient
 
     // Variables sidebar
     variables = JSON.parse(JSON.stringify(window.storyData.variables));
@@ -86,7 +87,6 @@ function initEditor() {
 function updateTransform() {
     nodesContainer.style.transform = `translate(${pan.x}px, ${pan.y}px) scale(${scale})`;
     svgCanvas.style.transform = `translate(${pan.x}px, ${pan.y}px) scale(${scale})`;
-    console.log('Current scale:', scale);
 }
 
 function createNode(id, text, index) {
@@ -137,6 +137,7 @@ function createNode(id, text, index) {
         document.removeEventListener('mouseup', onMouseUp);
         nodeDiv.style.zIndex = ''; // reset
         drawConnections(); // final redraw
+        expandCanvasIfNeeded();  // ← add this line
     };
 
     document.addEventListener('mousemove', onMouseMove);
@@ -345,6 +346,31 @@ function generateBranchingScript() {
     }
     recurse("start");
     showModal(script);
+}
+
+function expandCanvasIfNeeded() {
+    const nodes = document.querySelectorAll('.node');
+    if (nodes.length === 0) return;
+
+    let maxX = 0, maxY = 0;
+    nodes.forEach(node => {
+        const x = parseFloat(node.style.left) + node.offsetWidth;
+        const y = parseFloat(node.style.top) + node.offsetHeight;
+        maxX = Math.max(maxX, x);
+        maxY = Math.max(maxY, y);
+    });
+
+    const minSize = 5000;
+    const padding = 1000;
+    const newWidth = Math.max(minSize, maxX + padding);
+    const newHeight = Math.max(minSize, maxY + padding);
+
+    if (newWidth > nodesContainer.offsetWidth || newHeight > nodesContainer.offsetHeight) {
+        nodesContainer.style.width = `${newWidth}px`;
+        nodesContainer.style.height = `${newHeight}px`;
+        svgCanvas.style.width = `${newWidth}px`;
+        svgCanvas.style.height = `${newHeight}px`;
+    }
 }
 
 // Import handler — rebuild with new node creation

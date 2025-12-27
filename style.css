@@ -138,9 +138,10 @@ h1 {
     position: absolute;
     top: 0;
     left: 0;
-    width: 3000px;   /* large enough for big stories */
-    height: 3000px;
+    width: 5000px;      /* start large */
+    height: 5000px;
     transform-origin: 0 0;
+    /* remove any fixed width/height: 100% if present */
 }
 
 .node {
