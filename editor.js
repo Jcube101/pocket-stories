@@ -145,18 +145,30 @@ function createNode(id, text, index) {
     nodeDiv.className = 'node';
     nodeDiv.dataset.id = id;
 
-    // Load saved position or fall back to grid
-    const storyKey = 'pocketstories_layout_' + (window.storyData.title || 'untitled');
-    const layout = JSON.parse(localStorage.getItem(storyKey) || '{}');
-    const saved = layout[id];
+    // Load position: YAML first, then localStorage fallback, then grid
+    const passage = window.storyData.passages[id];
+    let posX, posY;
 
-    if (saved) {
-        nodeDiv.style.left = `${saved.x}px`;
-        nodeDiv.style.top = `${saved.y}px`;
+    if (passage.position) {
+        posX = passage.position.x;
+        posY = passage.position.y;
     } else {
-        nodeDiv.style.left = `${150 + (index % 4) * 380}px`;
-        nodeDiv.style.top = `${150 + Math.floor(index / 4) * 320}px`;
+        // Fallback to localStorage
+        const storyKey = 'pocketstories_layout_' + (window.storyData.title || 'untitled');
+        const layout = JSON.parse(localStorage.getItem(storyKey) || '{}');
+        const saved = layout[id];
+        if (saved) {
+            posX = saved.x;
+            posY = saved.y;
+        } else {
+            // Final fallback: grid
+            posX = 150 + (index % 4) * 380;
+            posY = 150 + Math.floor(index / 4) * 320;
+        }
     }
+
+    nodeDiv.style.left = `${posX}px`;
+    nodeDiv.style.top = `${posY}px`;
 
     nodeDiv.innerHTML = `
         <div class="node-title" contenteditable="true">${id}</div>
@@ -198,18 +210,29 @@ function createNode(id, text, index) {
             document.removeEventListener('mousemove', onMouseMove);
             document.removeEventListener('mouseup', onMouseUp);
             nodeDiv.style.zIndex = ''; // reset
-            drawConnections(); // final redraw
             expandCanvasIfNeeded();
 
-            saveState(); // ← add here
+            // Sync to both YAML and localStorage
+            const newX = parseFloat(nodeDiv.style.left);
+            const newY = parseFloat(nodeDiv.style.top);
 
-            // Persist new position
-            const updatedLayout = JSON.parse(localStorage.getItem(storyKey) || '{}');
-            updatedLayout[id] = {
-                x: parseFloat(nodeDiv.style.left),
-                y: parseFloat(nodeDiv.style.top)
-            };
-            localStorage.setItem(storyKey, JSON.stringify(updatedLayout));
+            if (!window.storyData.passages[id].position) {
+                window.storyData.passages[id].position = {};
+            }
+            window.storyData.passages[id].position.x = newX;
+            window.storyData.passages[id].position.y = newY;
+
+            // Also save to localStorage (for browser reloads without export)
+            const storyKey = 'pocketstories_layout_' + (window.storyData.title || 'untitled');
+            const layout = JSON.parse(localStorage.getItem(storyKey) || '{}');
+            if (layout[id]) {
+                layout[newId] = layout[id];
+                delete layout[id];
+                localStorage.setItem(storyKey, JSON.stringify(layout));
+            }
+
+            drawConnections();
+            saveState(); // for undo/redo
         };
 
         document.addEventListener('mousemove', onMouseMove);
