@@ -128,8 +128,19 @@ function createNode(id, text, index) {
     const nodeDiv = document.createElement('div');
     nodeDiv.className = 'node';
     nodeDiv.dataset.id = id;
-    nodeDiv.style.left = `${150 + (index % 4) * 380}px`;
-    nodeDiv.style.top = `${150 + Math.floor(index / 4) * 320}px`;
+
+    // Load saved position or fall back to grid
+    const storyKey = 'pocketstories_layout_' + (window.storyData.title || 'untitled');
+    const layout = JSON.parse(localStorage.getItem(storyKey) || '{}');
+    const saved = layout[id];
+
+    if (saved) {
+        nodeDiv.style.left = `${saved.x}px`;
+        nodeDiv.style.top = `${saved.y}px`;
+    } else {
+        nodeDiv.style.left = `${150 + (index % 4) * 380}px`;
+        nodeDiv.style.top = `${150 + Math.floor(index / 4) * 320}px`;
+    }
 
     nodeDiv.innerHTML = `
         <div class="node-title" contenteditable="true">${id}</div>
@@ -139,44 +150,52 @@ function createNode(id, text, index) {
 
     // Drag node or start connection
     nodeDiv.addEventListener('mousedown', e => {
-    // Start connection from output port
-    if (e.target.classList.contains('node-output')) {
-        connectingFrom = nodeDiv;
+        // Start connection from output port
+        if (e.target.classList.contains('node-output')) {
+            connectingFrom = nodeDiv;
+            e.stopPropagation();
+            return;
+        }
+
+        // Allow editing contenteditable fields
+        if (e.target.isContentEditable) return;
+
+        // Otherwise: start dragging the node
         e.stopPropagation();
-        return;
-    }
 
-    // Allow editing contenteditable fields
-    if (e.target.isContentEditable) return;
+        const startX = e.clientX;
+        const startY = e.clientY;
+        const origX = parseFloat(nodeDiv.style.left);
+        const origY = parseFloat(nodeDiv.style.top);
 
-    // Otherwise: start dragging the node
-    e.stopPropagation();
+        nodeDiv.style.zIndex = 100; // bring to front
 
-    const startX = e.clientX;
-    const startY = e.clientY;
-    const origX = parseFloat(nodeDiv.style.left);
-    const origY = parseFloat(nodeDiv.style.top);
+        const onMouseMove = (moveEvent) => {
+            const dx = moveEvent.clientX - startX;
+            const dy = moveEvent.clientY - startY;
+            nodeDiv.style.left = `${origX + dx}px`;
+            nodeDiv.style.top = `${origY + dy}px`;
+            drawConnections(); // live update
+        };
 
-    nodeDiv.style.zIndex = 100; // bring to front
+        const onMouseUp = () => {
+            document.removeEventListener('mousemove', onMouseMove);
+            document.removeEventListener('mouseup', onMouseUp);
+            nodeDiv.style.zIndex = ''; // reset
+            drawConnections(); // final redraw
+            expandCanvasIfNeeded();
 
-    const onMouseMove = (moveEvent) => {
-        const dx = moveEvent.clientX - startX;
-        const dy = moveEvent.clientY - startY;
-        nodeDiv.style.left = `${origX + dx}px`;
-        nodeDiv.style.top = `${origY + dy}px`;
-        drawConnections(); // live update
-    };
+            // Persist new position
+            const updatedLayout = JSON.parse(localStorage.getItem(storyKey) || '{}');
+            updatedLayout[id] = {
+                x: parseFloat(nodeDiv.style.left),
+                y: parseFloat(nodeDiv.style.top)
+            };
+            localStorage.setItem(storyKey, JSON.stringify(updatedLayout));
+        };
 
-    const onMouseUp = () => {
-        document.removeEventListener('mousemove', onMouseMove);
-        document.removeEventListener('mouseup', onMouseUp);
-        nodeDiv.style.zIndex = ''; // reset
-        drawConnections(); // final redraw
-        expandCanvasIfNeeded();  // ← add this line
-    };
-
-    document.addEventListener('mousemove', onMouseMove);
-    document.addEventListener('mouseup', onMouseUp);
+        document.addEventListener('mousemove', onMouseMove);
+        document.addEventListener('mouseup', onMouseUp);
     });
 
     // Save title change
