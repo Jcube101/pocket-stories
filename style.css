@@ -208,15 +208,33 @@ h1 {
 }
 
 .connection-path {
+    pointer-events: auto;  /* ← crucial: enables click/right-click */
+    cursor: pointer;
     fill: none;
     stroke: #666;
     stroke-width: 3;
     marker-end: url(#arrow);
+    transition: stroke 0.2s, stroke-width 0.2s;
+}
+
+.connection-path.selected {
+    stroke: #007bff;
+    stroke-width: 5;
 }
 
 @media (prefers-color-scheme: dark) {
-    .connection-path {
-        stroke: #aaa;
+    .connection-path { stroke: #aaa; }
+    .connection-path.selected { stroke: #4dabf7; }
+}
+
+.connection-path:hover {
+    stroke-width: 5;
+    stroke: #007bff;
+}
+
+@media (prefers-color-scheme: dark) {
+    .connection-path:hover {
+        stroke: #4dabf7;
     }
 }
 

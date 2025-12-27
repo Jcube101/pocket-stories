@@ -91,6 +91,17 @@ function initEditor() {
     let isPanning = false;
     let panStart = { x: 0, y: 0 };
 
+    // Deselect on background
+    wrapper.addEventListener('click', e => {
+        if (e.target === wrapper || e.target === svgCanvas) {
+            if (selectedNode) {
+                selectedNode.classList.remove('selected');
+                selectedNode = null;
+            }
+            document.querySelectorAll('.connection-path.selected').forEach(p => p.classList.remove('selected'));
+        }
+    });
+
     wrapper.addEventListener('mousedown', e => {
         if (e.button === 1) {  // middle mouse button
             isPanning = true;
@@ -326,6 +337,33 @@ function drawConnections() {
             path.classList.add("connection-path");
             path.setAttribute("marker-end", "url(#arrow)");
             svgCanvas.appendChild(path);
+
+            // Connection selection
+            path.dataset.from = id;
+            path.dataset.to = ch.target;
+            path.dataset.index = choiceIndex; // for multi-choices from same node
+
+            path.addEventListener('click', e => {
+                e.stopPropagation();
+                // Deselect node
+                if (selectedNode) {
+                    selectedNode.classList.remove('selected');
+                    selectedNode = null;
+                }
+                // Highlight this connection
+                document.querySelectorAll('.connection-path.selected').forEach(p => p.classList.remove('selected'));
+                path.classList.add('selected');
+            });
+
+            // Right-click delete
+            path.addEventListener('contextmenu', e => {
+                e.preventDefault();
+                if (confirm(`Delete connection "${ch.text || 'Continue'}" from ${id} to ${ch.target}?`)) {
+                    window.storyData.passages[id].choices.splice(choiceIndex, 1);
+                    drawConnections();
+                    saveState();
+                }
+            });
 
             // Label
             let labelText = ch.text || "Continue";
