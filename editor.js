@@ -99,6 +99,7 @@ function initEditor() {
 function updateTransform() {
     nodesContainer.style.transform = `translate(${pan.x}px, ${pan.y}px) scale(${scale})`;
     svgCanvas.style.transform = `translate(${pan.x}px, ${pan.y}px) scale(${scale})`;
+    console.log('Current scale:', scale);
 }
 
 function createNode(id, text, index) {
@@ -175,7 +176,7 @@ document.addEventListener('mouseup', e => {
 });
 
 function drawConnections() {
-    // Clear everything except defs
+    // Clear and re-add marker only (no viewBox, no sizing)
     svgCanvas.innerHTML = `<defs>
         <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
             <path d="M0,0 L0,6 L9,3 z" fill="#666" />
@@ -189,34 +190,32 @@ function drawConnections() {
         const fromNode = document.querySelector(`.node[data-id="${id}"]`);
         if (!fromNode) return;
 
-        const fromRect = fromNode.getBoundingClientRect();
-        const containerRect = nodesContainer.getBoundingClientRect();
-        const fromX = (fromRect.right - containerRect.left) / scale - pan.x / scale;
-        const fromY = (fromRect.top + fromRect.height / 2 - containerRect.top) / scale - pan.y / scale;
+        // Logical positions (same space as node.style.left/top)
+        const fromX = parseFloat(fromNode.style.left) + fromNode.offsetWidth;
+        const fromY = parseFloat(fromNode.style.top) + fromNode.offsetHeight / 2;
 
         p.choices.forEach((ch, choiceIndex) => {
             const toNode = document.querySelector(`.node[data-id="${ch.target}"]`);
             if (!toNode) return;
 
-            const toRect = toNode.getBoundingClientRect();
-            const toX = (toRect.left - containerRect.left) / scale - pan.x / scale;
-            const toY = (toRect.top + toRect.height / 2 - containerRect.top) / scale - pan.y / scale;
+            const toX = parseFloat(toNode.style.left);
+            const toY = parseFloat(toNode.style.top) + toNode.offsetHeight / 2;
 
-            // Unique ID for this connection's path
             const connId = `${id}-to-${ch.target}-${choiceIndex}`;
 
-            // Curved path (adjusted control points for smoother flow)
-            const midX = (fromX + toX) / 2;
-            const pathD = `M ${fromX} ${fromY} C ${fromX + 120} ${fromY} ${midX} ${toY} ${toX} ${toY}`;
+            // Gentle curve in logical space
+            const cp1x = fromX + 150;
+            const cp2x = toX - 150;
+            const pathD = `M ${fromX} ${fromY} C ${cp1x} ${fromY} ${cp2x} ${toY} ${toX} ${toY}`;
 
-            // Hidden path for textPath reference
+            // Hidden def for textPath
             const defPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
             defPath.id = `textpath-${connId}`;
             defPath.setAttribute("d", pathD);
             defPath.style.display = "none";
             svgCanvas.appendChild(defPath);
 
-            // Visible connection path
+            // Visible path
             const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
             path.setAttribute("d", pathD);
             path.classList.add("connection-path");
@@ -239,7 +238,7 @@ function drawConnections() {
             text.appendChild(textPath);
             svgCanvas.appendChild(text);
 
-            // Right-click to edit
+            // Right-click edit
             path.addEventListener('contextmenu', e => {
                 e.preventDefault();
                 const newText = prompt("Choice text", ch.text || "");
@@ -248,7 +247,7 @@ function drawConnections() {
                 if (cond !== null) ch.condition = cond || undefined;
                 const eff = prompt("Effect (optional)", ch.effect || "");
                 if (eff !== null) ch.effect = eff || undefined;
-                drawConnections(); // refresh labels
+                drawConnections();
             });
         });
     });
