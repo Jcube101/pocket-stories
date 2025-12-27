@@ -55,6 +55,15 @@ function initEditor() {
         createNode(id, p.text.trim(), index++);
     });
 
+        // Ensure start passage exists
+    if (!window.storyData.passages.start) {
+        window.storyData.passages.start = {
+            text: "You begin your adventure...\n\nWhat do you do?",
+            choices: []
+        };
+        console.log('Auto-created missing start passage');
+    }
+
     // Draw connections
     drawConnections();
     expandCanvasIfNeeded();  // ensure initial size is sufficient
@@ -170,6 +179,7 @@ function createNode(id, text, index) {
 
     nodeDiv.innerHTML = `
         <div class="node-title" contenteditable="true">${id}</div>
+        ${id === 'start' ? '<div class="start-badge">START</div>' : ''}
         <div class="node-text" contenteditable="true">${text}</div>
         <div class="node-output"></div>
     `;
