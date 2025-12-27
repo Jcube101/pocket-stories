@@ -70,6 +70,41 @@ function initEditor() {
     document.getElementById('zoom-reset').onclick = () => { scale = 1; pan = { x: 0, y: 0 }; updateTransform(); };
     document.getElementById('zoom-fit').onclick = fitToNodes;
 
+    // Middle-click panning on the wrapper
+    const wrapper = document.getElementById('canvas-wrapper');
+    let isPanning = false;
+    let panStart = { x: 0, y: 0 };
+
+    wrapper.addEventListener('mousedown', e => {
+        if (e.button === 1) {  // middle mouse button
+            isPanning = true;
+            panStart.x = e.clientX - pan.x;
+            panStart.y = e.clientY - pan.y;
+            wrapper.style.cursor = 'grabbing';
+            e.preventDefault();
+        }
+    });
+
+    document.addEventListener('mousemove', e => {
+        if (isPanning) {
+            pan.x = e.clientX - panStart.x;
+            pan.y = e.clientY - panStart.y;
+            updateTransform();
+        }
+    });
+
+    document.addEventListener('mouseup', e => {
+        if (e.button === 1 && isPanning) {
+            isPanning = false;
+            wrapper.style.cursor = 'default';
+        }
+    });
+
+    // Prevent context menu on middle-click release
+    wrapper.addEventListener('contextmenu', e => {
+        if (e.button === 1) e.preventDefault();
+    });
+
     // Sidebar tools
     document.getElementById('play-story').onclick = () => document.getElementById('player-btn').click();
     document.getElementById('export-yaml').onclick = exportYAML;
@@ -254,7 +289,7 @@ function drawConnections() {
             textPath.setAttribute("text-anchor", "middle");
             textPath.textContent = labelText;
             textPath.style.fontSize = "13px";
-            textPath.style.fill = "#374151";
+            textPath.style.fill = "#e2e8f0";
             text.appendChild(textPath);
             svgCanvas.appendChild(text);
 

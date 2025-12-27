@@ -98,8 +98,8 @@ h1 {
     left: 0;
     width: 100%;
     height: 100%;
-    overflow: auto;                /* enables native scrollbars */
-    -webkit-overflow-scrolling: touch; /* smooth on mobile */
+    overflow: auto;
+    -webkit-overflow-scrolling: touch;
 }
 
 #canvas-wrapper::-webkit-scrollbar {
@@ -133,15 +133,24 @@ h1 {
     }
 }
 
-#nodes-container,
+#nodes-container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 6000px;   /* large fixed size */
+    height: 6000px;
+    transform-origin: 0 0;
+}
+
 #svg-canvas {
     position: absolute;
     top: 0;
     left: 0;
-    width: 5000px;      /* start large */
-    height: 5000px;
+    width: 6000px;   /* match exactly */
+    height: 6000px;
+    pointer-events: none;   /* draws on top, ignores clicks */
+    overflow: visible;
     transform-origin: 0 0;
-    /* remove any fixed width/height: 100% if present */
 }
 
 .node {
@@ -208,5 +217,16 @@ h1 {
 @media (prefers-color-scheme: dark) {
     .connection-path {
         stroke: #aaa;
+    }
+}
+
+#svg-canvas text {
+    fill: #e2e8f0;  /* light gray, readable on dark */
+    font-weight: 500;
+}
+
+@media (prefers-color-scheme: light) {
+    #svg-canvas text {
+        fill: #1e293b;  /* dark slate for light theme */
     }
 }
