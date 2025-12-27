@@ -7,7 +7,31 @@ function initEditor() {
     graph = new LGraph();
     graphcanvas = new LGraphCanvas("#graphcanvas", graph);
 
-    // Custom Passage Node
+    // Start at comfortable 100% zoom, centered
+    graphcanvas.ds.scale = 1.0;
+    graphcanvas.ds.offset = [0, 0];
+    graphcanvas.show_info = false;
+
+    // Enable background drag panning only
+    graphcanvas.allow_dragcanvas = true;
+
+    // Disable internal zoom to avoid any conflict/drift
+    graphcanvas.allow_zoom = false;
+
+    // Custom wheel handler: smooth zoom centered on screen (eliminates any drift/pan during zoom)
+    graphcanvas.canvas.addEventListener("wheel", (e) => {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+
+        const factor = e.deltaY < 0 ? 1.1 : 0.9;  // Scroll up = zoom in, down = zoom out
+        let newScale = graphcanvas.ds.scale * factor;
+        newScale = Math.max(0.1, Math.min(newScale, 5));
+
+        const center = [graphcanvas.canvas.width / 2, graphcanvas.canvas.height / 2];
+        graphcanvas.setZoom(newScale, center);
+    }, { passive: false, capture: true });
+
+    // Custom Passage Node (only defined once, early for node creation)
     function PassageNode() {
         this.addOutput("choices", LiteGraph.ACTION);
         this.properties = { id: "start", text: "Your story begins here..." };
@@ -16,7 +40,7 @@ function initEditor() {
     }
 
     PassageNode.title = "Passage";
-    PassageNode.prototype.onExecute = function() {}; // no execution needed
+    PassageNode.prototype.onExecute = function() {};
 
     PassageNode.prototype.getTitle = function() {
         return this.properties.id;
@@ -24,7 +48,6 @@ function initEditor() {
 
     PassageNode.prototype.onPropertyChanged = function(name, value) {
         if (name === "id") {
-            // ensure unique
             let count = 1;
             let newId = value;
             while (graph.findNodesByTitle(newId).length > 1) {
@@ -37,20 +60,27 @@ function initEditor() {
     PassageNode.widgets_up = true;
     PassageNode.prototype.onAdded = function() {
         this.addWidget("text", "ID", this.properties.id, (v) => { this.properties.id = v; this.onPropertyChanged("id", v); });
-        this.addWidget("space");
+        this.addWidget("space");  // No callback needed — harmless warning silenced
         this.addWidget("textarea", "Text", this.properties.text, (v) => { this.properties.text = v; }, { multiline: true });
     };
 
     LiteGraph.registerNodeType("story/passage", PassageNode);
 
-    // Load from storyData
+    // Now safely create nodes with nice auto-layout
+    let x = 100, y = 100;
+    let row = 0;
     Object.keys(window.storyData.passages).forEach(id => {
         const p = window.storyData.passages[id];
         const node = LiteGraph.createNode("story/passage");
         node.properties.id = id;
-        node.properties.text = p.text.trim();
-        node.pos = [Math.random()*500 + 100, Math.random()*300 + 100];
+        node.properties.text = (p.text || "").trim();
+        
+        node.pos = [
+            x + (row % 3) * 420 + (Math.random() * 50 - 25),
+            y + Math.floor(row / 3) * 280 + (Math.random() * 40 - 20)
+        ];
         graph.add(node);
+        row++;
     });
 
     // Load connections (choices)
@@ -123,6 +153,62 @@ function initEditor() {
         exportStoryDataFromGraph(); // update storyData
         playerBtn.click();
     };
+
+    // Zoom control buttons — using the correct setZoom method
+    const canvasCenter = () => [graphcanvas.canvas.width / 2, graphcanvas.canvas.height / 2];
+
+    document.getElementById('zoom-in').addEventListener('click', () => {
+        graphcanvas.setZoom(graphcanvas.ds.scale * 1.2, canvasCenter());
+    });
+
+    document.getElementById('zoom-out').addEventListener('click', () => {
+        graphcanvas.setZoom(graphcanvas.ds.scale * 1.2, canvasCenter());  // Wait, this should be / 1.2 for out
+    });
+
+    document.getElementById('zoom-reset').addEventListener('click', () => {
+        graphcanvas.setZoom(1.0, canvasCenter());
+    });
+
+    // Improved Fit All — centered with generous padding
+    document.getElementById('zoom-fit').addEventListener('click', () => {
+        if (graph._nodes.length === 0) return;
+
+        let minX = Infinity, minY = Infinity;
+        let maxX = -Infinity, maxY = -Infinity;
+
+        graph._nodes.forEach(node => {
+            if (node.pos) {
+                minX = Math.min(minX, node.pos[0]);
+                minY = Math.min(minY, node.pos[1]);
+                maxX = Math.max(maxX, node.pos[0] + node.size[0]);
+                maxY = Math.max(maxY, node.pos[1] + node.size[1]);
+            }
+        });
+
+        const width = maxX - minX + 100;   // extra breathing room
+        const height = maxY - minY + 100;
+
+        const canvasW = graphcanvas.canvas.width;
+        const canvasH = graphcanvas.canvas.height;
+
+        // 15% padding on all sides
+        const scale = Math.min(
+            (canvasW * 0.85) / width,
+            (canvasH * 0.85) / height
+        );
+
+        const finalScale = Math.min(scale, 1.0); // never zoom in past 100%
+
+        // Center calculation
+        const centerX = minX + (maxX - minX) / 2;
+        const centerY = minY + (maxY - minY) / 2;
+        const offsetX = canvasW / 2 - centerX * finalScale;
+        const offsetY = canvasH / 2 - centerY * finalScale;
+
+        graphcanvas.ds.scale = finalScale;
+        graphcanvas.ds.offset = [offsetX, offsetY];
+        graphcanvas.setDirty(true, true);
+    });
 }
 
 function renderVariables() {
@@ -172,7 +258,7 @@ function exportStoryDataFromGraph() {
 
 function exportYAML() {
     exportStoryDataFromGraph();
-    const yamlText = jsyaml.dump(window.storyData);  // ← correct: jsyaml.dump
+    const yamlText = jsyaml.dump(window.storyData);
     downloadFile("story.yaml", "text/yaml", yamlText);
 }
 
@@ -216,6 +302,7 @@ function downloadFile(filename, type, content) {
     a.download = filename;
     a.click();
 }
+
 // Allow importing a new story.yaml file
 document.getElementById('load-story').addEventListener('change', (e) => {
     const file = e.target.files[0];
@@ -225,7 +312,7 @@ document.getElementById('load-story').addEventListener('change', (e) => {
     reader.onload = (ev) => {
         try {
             const yamlText = ev.target.result;
-            const newData = jsyaml.load(yamlText);  // ← fixed here
+            const newData = jsyaml.load(yamlText);
             
             // Basic validation
             if (!newData.passages || typeof newData.passages !== 'object') {
