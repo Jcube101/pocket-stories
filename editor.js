@@ -329,10 +329,17 @@ function drawConnections() {
 
             const connId = `${id}-to-${ch.target}-${choiceIndex}`;
 
-            // Gentle curve in logical space
-            const cp1x = fromX + 150;
-            const cp2x = toX - 150;
-            const pathD = `M ${fromX} ${fromY} C ${cp1x} ${fromY} ${cp2x} ${toY} ${toX} ${toY}`;
+            // Smarter routing: vertical offset to avoid node overlap
+            const deltaY = toY - fromY;
+            const horizontal = Math.max(120, Math.abs(toX - fromX) / 3); // wider on long links
+            const offset = Math.abs(deltaY) < 100 ? 80 : Math.sign(deltaY) * 150; // pronounced arc for vertical separation
+
+            const cp1x = fromX + horizontal;
+            const cp1y = fromY + offset;
+            const cp2x = toX - horizontal;
+            const cp2y = toY - offset;
+
+            const pathD = `M ${fromX} ${fromY} C ${cp1x} ${cp1y} ${cp2x} ${cp2y} ${toX} ${toY}`;
 
             // Hidden def for textPath
             const defPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
@@ -351,16 +358,14 @@ function drawConnections() {
             // Connection selection
             path.dataset.from = id;
             path.dataset.to = ch.target;
-            path.dataset.index = choiceIndex; // for multi-choices from same node
+            path.dataset.index = choiceIndex;
 
             path.addEventListener('click', e => {
                 e.stopPropagation();
-                // Deselect node
                 if (selectedNode) {
                     selectedNode.classList.remove('selected');
                     selectedNode = null;
                 }
-                // Highlight this connection
                 document.querySelectorAll('.connection-path.selected').forEach(p => p.classList.remove('selected'));
                 path.classList.add('selected');
             });
@@ -391,7 +396,7 @@ function drawConnections() {
             text.appendChild(textPath);
             svgCanvas.appendChild(text);
 
-            // Right-click edit
+            // Right-click edit (kept separate from delete for safety)
             path.addEventListener('contextmenu', e => {
                 e.preventDefault();
                 const newText = prompt("Choice text", ch.text || "");
