@@ -120,19 +120,6 @@ function initEditor() {
     wrapper.addEventListener('contextmenu', e => {
         if (e.button === 1) e.preventDefault();
     });
-
-    // Sidebar tools
-    document.getElementById('play-story').onclick = () => document.getElementById('player-btn').click();
-    document.getElementById('export-yaml').onclick = exportYAML;
-    document.getElementById('branching-script').onclick = generateBranchingScript;
-    document.getElementById('add-var').onclick = () => {
-        const type = prompt("Type: inventory / relationships / flags");
-        if (!["inventory", "relationships", "flags"].includes(type)) return;
-        const name = prompt("Name");
-        if (!name) return;
-        variables[type][name] = type === "relationships" ? 0 : false;
-        renderVariables();
-    };
 }
 
 function updateTransform() {
@@ -419,31 +406,118 @@ function exportStoryDataFromGraph() {
 }
 
 function exportYAML() {
-    exportStoryDataFromGraph();
-    const yamlText = jsyaml.dump(window.storyData);
-    downloadFile("story.yaml", "text/yaml", yamlText);
+    try {
+        console.log('Starting exportYAML');
+        exportStoryDataFromGraph(); // if this exists
+        const yamlText = jsyaml.dump(window.storyData);
+        console.log('YAML generated:', yamlText.substring(0, 100)); // preview
+        downloadFile("story.yaml", "text/yaml", yamlText);
+    } catch (err) {
+        console.error('Export failed:', err);
+        alert('Export failed: ' + err.message);
+    }
+}
+
+function downloadFile(filename, type, content) {
+    const blob = new Blob([content], { type });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
 }
 
 function generateBranchingScript() {
-    let script = "";
-    function recurse(id, depth = 0) {
-        const p = window.storyData.passages[id];
-        if (!p) return;
-        script += "  ".repeat(depth) + id + "\n";
-        script += "  ".repeat(depth) + p.text.trim() + "\n\n";
-        if (p.choices) {
-            p.choices.forEach(ch => {
-                let line = "  ".repeat(depth) + "→ " + ch.text + " → " + ch.target;
-                if (ch.condition) line += " [if " + ch.condition + "]";
-                if (ch.effect) line += " [" + ch.effect + "]";
-                script += line + "\n";
-                recurse(ch.target, depth + 1);
-            });
+    try {
+        console.log('Starting generateBranchingScript');
+        let script = "";
+        const visited = new Set();
+
+        function recurse(id, depth = 0) {
+            if (visited.has(id)) return; // skip cycles
+            visited.add(id);
+
+            const p = window.storyData.passages[id];
+            if (!p) return;
+
+            script += "  ".repeat(depth) + id + "\n";
+            script += "  ".repeat(depth) + p.text.trim() + "\n\n";
+
+            if (p.choices) {
+                p.choices.forEach(ch => {
+                    let line = "  ".repeat(depth) + "→ " + (ch.text || "Continue") + " → " + ch.target;
+                    if (ch.condition) line += " [if " + ch.condition + "]";
+                    if (ch.effect) line += " [" + ch.effect + "]";
+                    script += line + "\n";
+                    recurse(ch.target, depth + 1);
+                });
+            }
+            script += "\n";
         }
-        script += "\n";
+
+        recurse("start");
+        console.log('Script generated');
+        showModal(script);
+    } catch (err) {
+        console.error('Branching script failed:', err);
+        alert('Failed to generate branching script: ' + err.message);
     }
-    recurse("start");
-    showModal(script);
+}
+
+function showModal(content) {
+    // Create modal overlay
+    const overlay = document.createElement('div');
+    overlay.style.position = 'fixed';
+    overlay.style.top = '0';
+    overlay.style.left = '0';
+    overlay.style.width = '100%';
+    overlay.style.height = '100%';
+    overlay.style.background = 'rgba(0,0,0,0.7)';
+    overlay.style.display = 'flex';
+    overlay.style.alignItems = 'center';
+    overlay.style.justifyContent = 'center';
+    overlay.style.zIndex = '1000';
+
+    // Modal content
+    const modal = document.createElement('div');
+    modal.style.background = '#fff';
+    modal.style.padding = '20px';
+    modal.style.maxWidth = '80%';
+    modal.style.maxHeight = '80%';
+    modal.style.overflow = 'auto';
+    modal.style.borderRadius = '8px';
+    modal.style.boxShadow = '0 4px 20px rgba(0,0,0,0.3)';
+
+    // Dark mode support
+    if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+        modal.style.background = '#222';
+        modal.style.color = '#eee';
+    }
+
+    const pre = document.createElement('pre');
+    pre.textContent = content;
+    pre.style.whiteSpace = 'pre-wrap';
+    pre.style.fontSize = '14px';
+    pre.style.lineHeight = '1.5';
+    modal.appendChild(pre);
+
+    // Close button
+    const closeBtn = document.createElement('button');
+    closeBtn.textContent = 'Close';
+    closeBtn.style.marginTop = '20px';
+    closeBtn.style.padding = '8px 16px';
+    closeBtn.onclick = () => document.body.removeChild(overlay);
+    modal.appendChild(closeBtn);
+
+    overlay.onclick = (e) => {
+        if (e.target === overlay) document.body.removeChild(overlay);
+    };
+
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
 }
 
 function expandCanvasIfNeeded() {
@@ -569,3 +643,46 @@ document.addEventListener('keydown', e => {
         redo();
     }
 });
+// One-time sidebar tool bindings with debug
+const btnExport = document.getElementById('export-yaml');
+const btnBranching = document.getElementById('branching-script');
+const btnPlay = document.getElementById('play-story');
+const btnAddVar = document.getElementById('add-var');
+
+if (btnExport) {
+    btnExport.onclick = () => {
+        console.log('Export YAML button clicked');
+        exportYAML();
+    };
+} else {
+    console.warn('Button #export-yaml not found');
+}
+
+if (btnBranching) {
+    btnBranching.onclick = () => {
+        console.log('Branching script button clicked');
+        generateBranchingScript();
+    };
+} else {
+    console.warn('Button #branching-script not found');
+}
+
+if (btnPlay) {
+    btnPlay.onclick = () => {
+        console.log('Play story button clicked');
+        document.getElementById('player-btn').click();
+    };
+}
+
+if (btnAddVar) {
+    btnAddVar.onclick = () => {
+        console.log('Add variable button clicked');
+        const type = prompt("Type: inventory / relationships / flags");
+        if (!["inventory", "relationships", "flags"].includes(type)) return;
+        const name = prompt("Name");
+        if (!name) return;
+        variables[type][name] = type === "relationships" ? 0 : false;
+        renderVariables();
+        saveState();
+    };
+}
