@@ -9,6 +9,22 @@ let panStart = { x: 0, y: 0 };
 let connectingFrom = null;
 let selectedNode = null;
 let selectedConnection = null; // not used yet, but preparing for future
+let undoStack = [];
+let redoStack = [];
+const MAX_HISTORY = 20;
+
+function saveState() {
+    // Deep copy essential data
+    const state = {
+        passages: JSON.parse(JSON.stringify(window.storyData.passages)),
+        // If you later add node positions to storyData, include them here
+    };
+    undoStack.push(state);
+    if (undoStack.length > MAX_HISTORY) {
+        undoStack.shift();
+    }
+    redoStack = []; // clear redo when new action occurs
+}
 
 function initEditor() {
     nodesContainer = document.getElementById('nodes-container');
@@ -185,6 +201,8 @@ function createNode(id, text, index) {
             drawConnections(); // final redraw
             expandCanvasIfNeeded();
 
+            saveState(); // ← add here
+
             // Persist new position
             const updatedLayout = JSON.parse(localStorage.getItem(storyKey) || '{}');
             updatedLayout[id] = {
@@ -206,12 +224,14 @@ function createNode(id, text, index) {
             delete window.storyData.passages[id];
             nodeDiv.dataset.id = newId;
             drawConnections();
+            saveState(); // ← add here
         }
     });
 
     // Save text change
     nodeDiv.querySelector('.node-text').addEventListener('blur', e => {
         window.storyData.passages[id].text = e.target.textContent + "\n";
+        saveState(); // ← add here
     });
 
     // Start connection on output
@@ -243,6 +263,7 @@ document.addEventListener('mouseup', e => {
                 if (!window.storyData.passages[fromId].choices) window.storyData.passages[fromId].choices = [];
                 window.storyData.passages[fromId].choices.push({ text, target: toId });
                 drawConnections();
+                saveState(); // ← add here
             }
         }
     }
@@ -427,6 +448,38 @@ function expandCanvasIfNeeded() {
     }
 }
 
+function undo() {
+    if (undoStack.length === 0) return;
+
+    // Save current state to redo stack
+    redoStack.push({
+        passages: JSON.parse(JSON.stringify(window.storyData.passages))
+    });
+
+    // Restore previous state
+    const previous = undoStack.pop();
+    window.storyData.passages = previous.passages;
+
+    // Rebuild UI
+    initEditor(); // this will recreate all nodes & connections
+}
+
+function redo() {
+    if (redoStack.length === 0) return;
+
+    // Save current state to undo stack
+    undoStack.push({
+        passages: JSON.parse(JSON.stringify(window.storyData.passages))
+    });
+
+    // Restore next state
+    const next = redoStack.pop();
+    window.storyData.passages = next.passages;
+
+    // Rebuild UI
+    initEditor();
+}
+
 // Import handler — rebuild with new node creation
 document.getElementById('load-story').addEventListener('change', e => {
     const file = e.target.files[0];
@@ -465,6 +518,7 @@ document.addEventListener('keydown', e => {
             selectedNode.remove();
             selectedNode = null;
             drawConnections();
+            saveState(); // ← add here
         }
     }
 
@@ -478,5 +532,17 @@ document.addEventListener('keydown', e => {
     if (e.ctrlKey && e.key === 's') {
         e.preventDefault();
         exportYAML();
+    }
+
+    //Ctrl+Z Undo
+        if (e.ctrlKey && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        undo();
+    }
+
+    //Ctrl+Y Redo
+    if ((e.ctrlKey && e.key === 'y') || (e.ctrlKey && e.shiftKey && e.key === 'Z')) {
+        e.preventDefault();
+        redo();
     }
 });
