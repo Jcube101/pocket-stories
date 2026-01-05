@@ -811,6 +811,7 @@ const btnAddVar = document.getElementById('add-var');
 const sidebar = document.getElementById('sidebar');
 const graphContainer = document.getElementById('graph-container');
 const toggleBtn = document.getElementById('toggle-sidebar');
+const btnHelp = document.getElementById('help-btn');
 
 if (btnValidate) {
     btnValidate.onclick = () => validateStory();
@@ -853,4 +854,31 @@ if (toggleBtn) {
         graphContainer.classList.toggle('expanded');
         toggleBtn.textContent = sidebar.classList.contains('hidden') ? '▶' : '◀';
     };
+}
+
+if (btnHelp) {
+    btnHelp.onclick = () => showModal(`
+        <h2>Pocket Stories Quickstart</h2>
+        <p>Create branching interactive fiction with variables, conditions, and effects.</p>
+        <h3>Basics</h3>
+        <ul>
+            <li><strong>Nodes</strong>: Double-click title/text to edit. Drag to rearrange.</li>
+            <li><strong>Connections</strong>: Drag from output dot to another node. Right-click line to edit choice/condition/effect or delete.</li>
+            <li><strong>Delete</strong>: Select node + Delete key.</li>
+        </ul>
+        <h3>Variables (Sidebar)</h3>
+        <ul>
+            <li><strong>Inventory</strong>: Items (e.g., key: true). Condition: inventory.key == true</li>
+            <li><strong>Relationships</strong>: Scores (e.g., Alice: 50). Effect: relationships.Alice += 10</li>
+            <li><strong>Flags</strong>: Toggles (e.g., met_guard: true). Effect: flags.met_guard = true</li>
+            <li>Use in choice right-click: "Condition" gates visibility, "Effect" changes state.</li>
+        </ul>
+        <h3>Tools</h3>
+        <ul>
+            <li>Play: Test in player mode.</li>
+            <li>Export/Import: story.yaml with all data.</li>
+            <li>Validate: Check for issues like missing start.</li>
+        </ul>
+        <p>Stay static—edit story.yaml directly for bulk changes.</p>
+    `);
 }
