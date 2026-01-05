@@ -769,6 +769,9 @@ const btnExport = document.getElementById('export-yaml');
 const btnBranching = document.getElementById('branching-script');
 const btnPlay = document.getElementById('play-story');
 const btnAddVar = document.getElementById('add-var');
+const sidebar = document.getElementById('sidebar');
+const graphContainer = document.getElementById('graph-container');
+const toggleBtn = document.getElementById('toggle-sidebar');
 
 if (btnValidate) {
     btnValidate.onclick = () => validateStory();
@@ -801,5 +804,13 @@ if (btnAddVar) {
         variables[type][name] = type === "relationships" ? 0 : false;
         renderVariables();
         saveState();
+    };
+}
+
+if (toggleBtn) {
+    toggleBtn.onclick = () => {
+        sidebar.classList.toggle('hidden');
+        graphContainer.classList.toggle('expanded');
+        toggleBtn.textContent = sidebar.classList.contains('hidden') ? '▶' : '◀';
     };
 }

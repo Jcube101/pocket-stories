@@ -287,3 +287,34 @@ h1 {
 @media (prefers-color-scheme: dark) {
     .start-badge { background: #34d399; }
 }
+
+#sidebar.hidden {
+    transform: translateX(-100%);
+}
+
+#toggle-sidebar {
+    position: fixed;
+    left: 10px;
+    top: 10px;
+    z-index: 100;
+    background: rgba(0,0,0,0.5);
+    color: white;
+    border: none;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    font-size: 20px;
+    cursor: pointer;
+}
+
+#sidebar {
+    transition: transform 0.3s ease;
+    position: relative;
+    z-index: 10;
+}
+
+/* Adjust graph when sidebar hidden */
+#graph-container.expanded {
+    left: 0 !important; /* override any fixed width if present */
+    width: 100% !important;
+}
