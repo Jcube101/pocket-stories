@@ -438,17 +438,56 @@ function renderVariables() {
     Object.keys(variables).forEach(cat => {
         const h3 = document.createElement('h3');
         h3.textContent = cat.charAt(0).toUpperCase() + cat.slice(1);
+        h3.title = getCategoryTooltip(cat); // Add tooltip
         container.appendChild(h3);
         Object.keys(variables[cat]).forEach(key => {
             const div = document.createElement('div');
-            div.innerHTML = `<strong>${key}</strong>: <input type="text" value="${variables[cat][key]}" data-cat="${cat}" data-key="${key}"> <button onclick="this.parentNode.remove(); delete variables['${cat}']['${key}']">Remove</button>`;
-            div.querySelector('input').onchange = e => {
-                const val = e.target.value;
-                variables[cat][key] = cat === "relationships" ? Number(val) : (val === "true" || val === "false" ? val === "true" : val);
+            div.style.display = 'flex';
+            div.style.alignItems = 'center';
+            div.style.marginBottom = '8px';
+
+            const label = document.createElement('strong');
+            label.textContent = key;
+            label.style.flex = '1';
+            div.appendChild(label);
+
+            const input = document.createElement('input');
+            input.type = cat === 'relationships' ? 'number' : 'text';
+            input.value = variables[cat][key];
+            input.style.width = '80px';
+            input.onchange = e => {
+                let val = e.target.value;
+                if (cat === 'relationships') {
+                    val = Number(val) || 0; // Enforce number
+                } else {
+                    val = (val === 'true') ? true : (val === 'false') ? false : val; // Boolean or string
+                }
+                variables[cat][key] = val;
+                window.storyData.variables = JSON.parse(JSON.stringify(variables)); // Sync to data
+                saveState(); // Track changes
             };
+            div.appendChild(input);
+
+            const removeBtn = document.createElement('button');
+            removeBtn.textContent = 'Remove';
+            removeBtn.onclick = () => {
+                delete variables[cat][key];
+                renderVariables();
+                window.storyData.variables = JSON.parse(JSON.stringify(variables));
+                saveState();
+            };
+            div.appendChild(removeBtn);
+
             container.appendChild(div);
         });
     });
+}
+
+// Helper for category tooltips
+function getCategoryTooltip(cat) {
+    if (cat === 'inventory') return 'Items or quantities (e.g., key: true). Use in conditions: inventory.key == true';
+    if (cat === 'relationships') return 'Numeric scores (e.g., Alice: 50). Use in effects: relationships.Alice += 10';
+    if (cat === 'flags') return 'Boolean toggles (e.g., met_guard: true). Use in effects: flags.met_guard = true';
 }
 
 function exportStoryDataFromGraph() {
@@ -801,8 +840,9 @@ if (btnAddVar) {
         if (!["inventory", "relationships", "flags"].includes(type)) return;
         const name = prompt("Name");
         if (!name) return;
-        variables[type][name] = type === "relationships" ? 0 : false;
+        variables[type][name] = type === 'relationships' ? 0 : false;
         renderVariables();
+        window.storyData.variables = JSON.parse(JSON.stringify(variables)); // Sync
         saveState();
     };
 }
