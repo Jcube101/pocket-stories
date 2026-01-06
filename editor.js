@@ -435,52 +435,88 @@ function fitToNodes() {
 function renderVariables() {
     const container = document.getElementById('variables');
     container.innerHTML = '';
+
     Object.keys(variables).forEach(cat => {
         const h3 = document.createElement('h3');
         h3.textContent = cat.charAt(0).toUpperCase() + cat.slice(1);
-        h3.title = getCategoryTooltip(cat); // Add tooltip
+        h3.title = getCategoryTooltip(cat);
         container.appendChild(h3);
+
         Object.keys(variables[cat]).forEach(key => {
-            const div = document.createElement('div');
-            div.style.display = 'flex';
-            div.style.alignItems = 'center';
-            div.style.marginBottom = '8px';
+            const row = document.createElement('div');
+            row.className = 'variable-row';
 
             const label = document.createElement('strong');
             label.textContent = key;
             label.style.flex = '1';
-            div.appendChild(label);
+            row.appendChild(label);
 
             const input = document.createElement('input');
             input.type = cat === 'relationships' ? 'number' : 'text';
             input.value = variables[cat][key];
             input.style.width = '80px';
-            input.onchange = e => {
-                let val = e.target.value;
-                if (cat === 'relationships') {
-                    val = Number(val) || 0; // Enforce number
-                } else {
-                    val = (val === 'true') ? true : (val === 'false') ? false : val; // Boolean or string
-                }
+            input.onchange = () => {
+                let val = input.value;
+                if (cat === 'relationships') val = Number(val) || 0;
+                else val = val === 'true' ? true : val === 'false' ? false : val;
                 variables[cat][key] = val;
-                window.storyData.variables = JSON.parse(JSON.stringify(variables)); // Sync to data
-                saveState(); // Track changes
+                window.storyData.variables = JSON.parse(JSON.stringify(variables));
+                saveState();
             };
-            div.appendChild(input);
+            row.appendChild(input);
 
             const removeBtn = document.createElement('button');
             removeBtn.textContent = 'Remove';
+            removeBtn.className = 'variable-remove';
             removeBtn.onclick = () => {
                 delete variables[cat][key];
                 renderVariables();
                 window.storyData.variables = JSON.parse(JSON.stringify(variables));
                 saveState();
             };
-            div.appendChild(removeBtn);
+            row.appendChild(removeBtn);
 
-            container.appendChild(div);
+            container.appendChild(row);
         });
     });
+
+    // Add Variable form (replaces old prompt button)
+    const addForm = document.createElement('div');
+    addForm.style.marginTop = '16px';
+    addForm.style.display = 'flex';
+    addForm.style.gap = '8px';
+    addForm.style.alignItems = 'center';
+
+    const typeSelect = document.createElement('select');
+    ['inventory', 'relationships', 'flags'].forEach(t => {
+        const opt = document.createElement('option');
+        opt.value = t;
+        opt.textContent = t.charAt(0).toUpperCase() + t.slice(1);
+        typeSelect.appendChild(opt);
+    });
+
+    const nameInput = document.createElement('input');
+    nameInput.type = 'text';
+    nameInput.placeholder = 'Variable name';
+    nameInput.style.flex = '1';
+
+    const addBtn = document.createElement('button');
+    addBtn.textContent = '+ Add';
+    addBtn.onclick = () => {
+        const type = typeSelect.value;
+        const name = nameInput.value.trim();
+        if (!name) return;
+        variables[type][name] = type === 'relationships' ? 0 : false;
+        nameInput.value = '';
+        renderVariables();
+        window.storyData.variables = JSON.parse(JSON.stringify(variables));
+        saveState();
+    };
+
+    addForm.appendChild(typeSelect);
+    addForm.appendChild(nameInput);
+    addForm.appendChild(addBtn);
+    container.appendChild(addForm);
 }
 
 // Helper for category tooltips
@@ -833,19 +869,6 @@ if (btnBranching) {
 
 if (btnPlay) {
     btnPlay.onclick = () => document.getElementById('player-btn').click();
-}
-
-if (btnAddVar) {
-    btnAddVar.onclick = () => {
-        const type = prompt("Type: inventory / relationships / flags");
-        if (!["inventory", "relationships", "flags"].includes(type)) return;
-        const name = prompt("Name");
-        if (!name) return;
-        variables[type][name] = type === 'relationships' ? 0 : false;
-        renderVariables();
-        window.storyData.variables = JSON.parse(JSON.stringify(variables)); // Sync
-        saveState();
-    };
 }
 
 if (toggleBtn) {

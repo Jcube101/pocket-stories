@@ -318,3 +318,89 @@ h1 {
     left: 0 !important; /* override any fixed width if present */
     width: 100% !important;
 }
+
+/* Add right margin to rows for scrollbar clearance */
+.variable-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 8px;
+    padding: 4px 12px 4px 0;   /* right padding prevents scrollbar overlap */
+}
+
+.variable-row strong {
+    flex: 1;
+    min-width: 100px;
+}
+
+.variable-row input {
+    width: 90px;
+    padding: 4px 8px;
+    margin-right: 8px;         /* space between input and Remove button */
+    box-sizing: border-box;
+}
+/* Center text vertically in Remove button */
+.variable-remove {
+    background: #ef4444;
+    color: white;
+    border: none;
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    font-size: 16px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;   /* centers text horizontally */
+    text-align: center;
+}
+
+.variable-remove:hover {
+    background: #dc2626;
+}
+
+@media (prefers-color-scheme: dark) {
+    .variable-remove {
+        background: #f87171;
+    }
+    .variable-remove:hover {
+        background: #ef4444;
+    }
+}
+
+/* Divider after each category */
+#variables h3 {
+    margin: 20px 0 8px 0;
+    padding-bottom: 6px;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+
+@media (prefers-color-scheme: light) {
+    #variables h3 {
+        border-bottom-color: rgba(0,0,0,0.1);
+    }
+}
+
+/* Ensure add form has same clearance */
+#variables > div:last-child {
+    margin-top: 20px;
+    padding-top: 16px;
+    border-top: 2px solid rgba(255,255,255,0.15);
+    margin-right: 8px;      /* ← consistent with rows */
+}
+
+@media (prefers-color-scheme: light) {
+    #variables > div:last-child {
+        border-top-color: rgba(0,0,0,0.15);
+    }
+}
+
+#variables select,
+#variables input[type=text] {
+    padding: 6px 10px;
+    margin-right: 8px;         /* space before + Add button */
+    border-radius: 6px;
+    border: 1px solid #666;
+}
