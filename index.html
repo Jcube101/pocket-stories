@@ -23,7 +23,17 @@
             <div id="sidebar">
                 <h2>Global Variables</h2>
                 <div id="variables"></div>
-                <button id="add-var" style="width:100%; margin-top:12px; padding:10px;">+ Add Variable</button>
+                <div id="add-variable-form" style="margin-top: 20px; padding-top: 16px; border-top: 2px solid rgba(255,255,255,0.15); padding-right: 16px;">
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                        <select id="new-var-type">
+                            <option value="inventory">Inventory</option>
+                            <option value="relationships">Relationships</option>
+                            <option value="flags">Flags</option>
+                        </select>
+                        <input type="text" id="new-var-name" placeholder="Variable name" style="flex: 1; padding: 6px 10px;">
+                        <button id="add-var-btn">+ Add</button>
+                    </div>
+                </div>
 
                 <h2>Tools</h2>
                 <button id="branching-script">View as Branching Script</button>

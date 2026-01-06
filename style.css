@@ -339,6 +339,7 @@ h1 {
     margin-right: 8px;         /* space between input and Remove button */
     box-sizing: border-box;
 }
+
 /* Center text vertically in Remove button */
 .variable-remove {
     background: #ef4444;
@@ -347,14 +348,18 @@ h1 {
     width: 28px;
     height: 28px;
     border-radius: 6px;
-    font-size: 16px;
-    line-height: 1;
+    font-size: 12px;
+    line-height: 1;               /* reset default line-height */
     cursor: pointer;
     padding: 0;
     display: flex;
-    align-items: center;
-    justify-content: center;   /* centers text horizontally */
-    text-align: center;
+    align-items: center;          /* vertical center */
+    justify-content: center;      /* horizontal center */
+}
+
+/* Optional: smaller font if you still find it too big */
+.variable-remove {
+    font-size: 11px;              /* ← try 11px or 10px */
 }
 
 .variable-remove:hover {
@@ -383,16 +388,17 @@ h1 {
     }
 }
 
-/* Ensure add form has same clearance */
-#variables > div:last-child {
+/* Separation only for the add form, not between variables */
+#add-variable-form {  /* use the ID from the new static form */
     margin-top: 20px;
     padding-top: 16px;
     border-top: 2px solid rgba(255,255,255,0.15);
-    margin-right: 8px;      /* ← consistent with rows */
+    padding-right: 16px;
+    box-sizing: border-box;
 }
 
 @media (prefers-color-scheme: light) {
-    #variables > div:last-child {
+    #add-variable-form {
         border-top-color: rgba(0,0,0,0.15);
     }
 }

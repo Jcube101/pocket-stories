@@ -479,44 +479,6 @@ function renderVariables() {
             container.appendChild(row);
         });
     });
-
-    // Add Variable form (replaces old prompt button)
-    const addForm = document.createElement('div');
-    addForm.style.marginTop = '16px';
-    addForm.style.display = 'flex';
-    addForm.style.gap = '8px';
-    addForm.style.alignItems = 'center';
-
-    const typeSelect = document.createElement('select');
-    ['inventory', 'relationships', 'flags'].forEach(t => {
-        const opt = document.createElement('option');
-        opt.value = t;
-        opt.textContent = t.charAt(0).toUpperCase() + t.slice(1);
-        typeSelect.appendChild(opt);
-    });
-
-    const nameInput = document.createElement('input');
-    nameInput.type = 'text';
-    nameInput.placeholder = 'Variable name';
-    nameInput.style.flex = '1';
-
-    const addBtn = document.createElement('button');
-    addBtn.textContent = '+ Add';
-    addBtn.onclick = () => {
-        const type = typeSelect.value;
-        const name = nameInput.value.trim();
-        if (!name) return;
-        variables[type][name] = type === 'relationships' ? 0 : false;
-        nameInput.value = '';
-        renderVariables();
-        window.storyData.variables = JSON.parse(JSON.stringify(variables));
-        saveState();
-    };
-
-    addForm.appendChild(typeSelect);
-    addForm.appendChild(nameInput);
-    addForm.appendChild(addBtn);
-    container.appendChild(addForm);
 }
 
 // Helper for category tooltips
@@ -848,6 +810,38 @@ const sidebar = document.getElementById('sidebar');
 const graphContainer = document.getElementById('graph-container');
 const toggleBtn = document.getElementById('toggle-sidebar');
 const btnHelp = document.getElementById('help-btn');
+// Add variable handler (runs once)
+const addVarBtn = document.getElementById('add-var-btn');
+const varTypeSelect = document.getElementById('new-var-type');
+const varNameInput = document.getElementById('new-var-name');
+
+if (addVarBtn && varTypeSelect && varNameInput) {
+    addVarBtn.onclick = () => {
+        const type = varTypeSelect.value;
+        const name = varNameInput.value.trim();
+        if (!name) {
+            alert("Please enter a variable name.");
+            return;
+        }
+        if (variables[type][name] !== undefined) {
+            alert("Variable already exists.");
+            return;
+        }
+        variables[type][name] = type === 'relationships' ? 0 : false;
+        varNameInput.value = ''; // clear input
+        renderVariables();       // refresh list
+        window.storyData.variables = JSON.parse(JSON.stringify(variables));
+        saveState();
+    };
+
+    // Optional: add Enter key support
+    varNameInput.addEventListener('keypress', e => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            addVarBtn.click();
+        }
+    });
+}
 
 if (btnValidate) {
     btnValidate.onclick = () => validateStory();
