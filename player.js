@@ -180,7 +180,7 @@ const conditionEvaluator = (() => {
                 continue;
             }
 
-            if (['<', '>', '!', '-', '+'].includes(char)) {
+            if (['<', '>', '!'].includes(char)) {
                 tokens.push({ type: TOKEN_TYPES.operator, value: char });
                 i += 1;
                 continue;
@@ -270,9 +270,9 @@ const conditionEvaluator = (() => {
             const token = peek();
             if (!token) throw new Error('Unexpected end of expression');
 
-            if (token.type === TOKEN_TYPES.operator && ['!', '-', '+'].includes(token.value)) {
-                const operator = consume().value;
-                return { type: 'unary', operator, argument: parsePrimary() };
+            if (token.type === TOKEN_TYPES.operator && token.value === '!') {
+                consume();
+                return { type: 'unary', operator: '!', argument: parsePrimary() };
             }
 
             if (token.type === TOKEN_TYPES.paren && token.value === '(') {
@@ -343,8 +343,6 @@ const conditionEvaluator = (() => {
         if (node.type === 'unary') {
             const arg = evaluateNode(node.argument, scope);
             if (node.operator === '!') return !arg;
-            if (node.operator === '-') return -Number(arg);
-            if (node.operator === '+') return Number(arg);
             throw new Error(`Unsupported unary operator: ${node.operator}`);
         }
 
@@ -391,7 +389,6 @@ function evalCondition(cond) {
         // README-style examples:
         // - inventory.key == true
         // - relationships.Alice >= 3 && !flags.opened_gate
-        // - relationships.Guard <= -1
         // - flags.met_guide == false || inventory.token == "silver"
         return conditionEvaluator.evaluate(cond, scope);
     } catch (e) {

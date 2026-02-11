@@ -704,11 +704,41 @@ function generateBranchingScript() {
 
         recurse("start");
         console.log('Script generated');
-        showModal(script);
+        showModal({ text: script });
     } catch (err) {
         console.error('Branching script failed:', err);
         alert('Failed to generate branching script: ' + err.message);
     }
+}
+
+function sanitizeHTML(html) {
+    const template = document.createElement('template');
+    template.innerHTML = html;
+
+    const allowedTags = new Set(['H2', 'H3', 'P', 'UL', 'LI', 'STRONG', 'EM', 'CODE', 'BR']);
+    const walker = document.createTreeWalker(template.content, NodeFilter.SHOW_ELEMENT, null);
+    const toReplace = [];
+
+    while (walker.nextNode()) {
+        const el = walker.currentNode;
+        if (!allowedTags.has(el.tagName)) {
+            toReplace.push(el);
+            continue;
+        }
+
+        // Strip all attributes from allowed tags.
+        while (el.attributes.length > 0) {
+            el.removeAttribute(el.attributes[0].name);
+        }
+    }
+
+    toReplace.forEach(el => {
+        const fragment = document.createDocumentFragment();
+        while (el.firstChild) fragment.appendChild(el.firstChild);
+        el.replaceWith(fragment);
+    });
+
+    return template.innerHTML;
 }
 
 function showModal(content) {
@@ -739,9 +769,44 @@ function showModal(content) {
         modal.style.color = '#f3f4f6';
     }
 
-    // Use innerHTML to render formatted content
     const contentDiv = document.createElement('div');
-    contentDiv.innerHTML = content;
+
+    if (content instanceof Node) {
+        contentDiv.appendChild(content);
+    } else if (Array.isArray(content) && content.every(node => node instanceof Node)) {
+        content.forEach(node => contentDiv.appendChild(node));
+    } else if (content && typeof content === 'object') {
+        if (typeof content.text === 'string' && content.text.length > 0) {
+            const textBlock = document.createElement('p');
+            textBlock.style.whiteSpace = 'pre-wrap';
+            textBlock.textContent = content.text;
+            contentDiv.appendChild(textBlock);
+        }
+
+        if (Array.isArray(content.listItems) && content.listItems.length > 0) {
+            const list = document.createElement('ul');
+            list.style.textAlign = 'left';
+            list.style.paddingLeft = '1.5em';
+            content.listItems.forEach(item => {
+                const listItem = document.createElement('li');
+                listItem.textContent = item;
+                list.appendChild(listItem);
+            });
+            contentDiv.appendChild(list);
+        }
+
+        if (typeof content.richHTML === 'string' && content.richHTML.trim().length > 0) {
+            const rich = document.createElement('div');
+            rich.innerHTML = sanitizeHTML(content.richHTML);
+            contentDiv.appendChild(rich);
+        }
+    } else {
+        const textBlock = document.createElement('p');
+        textBlock.style.whiteSpace = 'pre-wrap';
+        textBlock.textContent = typeof content === 'string' ? content : '';
+        contentDiv.appendChild(textBlock);
+    }
+
     modal.appendChild(contentDiv);
 
     // Close button
@@ -840,21 +905,45 @@ function validateStory() {
     drawConnections();
 
     // Report
+    const report = document.createElement('div');
+
+    const heading = document.createElement('strong');
+    heading.style.fontSize = '1.2em';
+
+    const summary = document.createElement('p');
+    summary.style.marginTop = '1em';
+
     if (issues.length === 0) {
-        showModal(`
-            <strong style="color:#10b981; font-size:1.2em">✓ All good!</strong>
-            <p style="margin-top:1em">Your story has no validation issues.</p>
-        `);
-    } else {
-        let html = `
-            <strong style="color:#ef4444; font-size:1.2em">⚠ Validation issues found (${issues.length})</strong>
-            <p style="margin:1em 0; color:#666">Fix these to ensure your story plays correctly:</p>
-            <ul style="text-align:left; margin:1em 0; padding-left:1.5em; line-height:1.6">
-        `;
-        issues.forEach(iss => html += `<li>${iss}</li>`);
-        html += `</ul>`;
-        showModal(html);
+        heading.style.color = '#10b981';
+        heading.textContent = '✓ All good!';
+        summary.textContent = 'Your story has no validation issues.';
+        report.appendChild(heading);
+        report.appendChild(summary);
+        showModal(report);
+        return;
     }
+
+    heading.style.color = '#ef4444';
+    heading.textContent = `⚠ Validation issues found (${issues.length})`;
+    summary.style.color = '#666';
+    summary.textContent = 'Fix these to ensure your story plays correctly:';
+    report.appendChild(heading);
+    report.appendChild(summary);
+
+    const list = document.createElement('ul');
+    list.style.textAlign = 'left';
+    list.style.margin = '1em 0';
+    list.style.paddingLeft = '1.5em';
+    list.style.lineHeight = '1.6';
+
+    issues.forEach(issue => {
+        const item = document.createElement('li');
+        item.textContent = issue;
+        list.appendChild(item);
+    });
+
+    report.appendChild(list);
+    showModal(report);
 }
 
 function findCycles(passages) {
@@ -1187,7 +1276,7 @@ if (toggleBtn) {
 }
 
 if (btnHelp) {
-    btnHelp.onclick = () => showModal(`
+    btnHelp.onclick = () => showModal({ richHTML: `
         <h2>Pocket Stories Quickstart</h2>
         <p>Create branching interactive fiction with variables, conditions, and effects.</p>
         <h3>Basics</h3>
@@ -1210,5 +1299,5 @@ if (btnHelp) {
             <li>Validate: Check for issues like missing start.</li>
         </ul>
         <p>Stay static—edit story.yaml directly for bulk changes.</p>
-    `);
+    ` });
 }
