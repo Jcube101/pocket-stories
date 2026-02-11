@@ -1,10 +1,20 @@
 // player.js
 let currentPassage = "start";
 let variablesState = {};
-let history = []; // [{passage, choiceText}]
+let history = []; // [{passage, choiceText, target}]
+let renderToken = 0;
+let audioCtx = null;
+
+function normalizeVariables(v = {}) {
+    return {
+        inventory: v.inventory || {},
+        relationships: v.relationships || {},
+        flags: v.flags || {}
+    };
+}
 
 function initPlayer() {
-    variablesState = JSON.parse(JSON.stringify(window.storyData.variables));
+    variablesState = JSON.parse(JSON.stringify(normalizeVariables(window.storyData.variables)));
     currentPassage = "start";
     history = [];
     renderPassage();
@@ -20,36 +30,64 @@ function startPlayer(startPassage = "start") {
 window.startPlayer = startPlayer;
 
 function renderPassage() {
+    renderToken += 1;
+    const thisToken = renderToken;
+
+    const textEl = document.getElementById('passage-text');
+    const choicesDiv = document.getElementById('choices');
     const p = window.storyData.passages[currentPassage];
+
+    textEl.classList.remove('passage-fade');
+    // force reflow to restart animation
+    // eslint-disable-next-line no-unused-expressions
+    textEl.offsetWidth;
+    textEl.classList.add('passage-fade');
+
     if (!p) {
-        document.getElementById('passage-text').textContent = "The end.";
-        document.getElementById('choices').innerHTML = "";
+        textEl.textContent = "The end.";
+        choicesDiv.innerHTML = "";
+        playCue('fail');
         return;
     }
-    document.getElementById('passage-text').textContent = p.text.trim();
 
-    const choicesDiv = document.getElementById('choices');
+    revealTextTypewriter(textEl, p.text.trim(), thisToken);
+
     choicesDiv.innerHTML = "";
-    if (p.choices) {
-        p.choices.forEach(ch => {
-            if (ch.condition && !evalCondition(ch.condition)) return;
-            const btn = document.createElement('button');
-            btn.textContent = ch.text;
-            btn.onclick = () => {
-                if (ch.effect) applyEffect(ch.effect);
-                history.push({passage: currentPassage, choiceText: ch.text});
-                currentPassage = ch.target;
-                renderPassage();
-            };
-            choicesDiv.appendChild(btn);
-        });
+    const visibleChoices = (p.choices || []).filter(ch => !ch.condition || evalCondition(ch.condition));
+
+    if (visibleChoices.length === 0) {
+        const endNote = document.createElement('div');
+        endNote.className = 'end-note';
+        endNote.textContent = 'No available choices.';
+        choicesDiv.appendChild(endNote);
+        playCue('fail');
+        return;
     }
+
+    visibleChoices.forEach(ch => {
+        const btn = document.createElement('button');
+        btn.textContent = ch.text;
+        btn.onclick = () => {
+            playCue('click');
+            if (ch.effect) applyEffect(ch.effect);
+            history.push({ passage: currentPassage, choiceText: ch.text, target: ch.target });
+            currentPassage = ch.target;
+            renderPassage();
+        };
+        choicesDiv.appendChild(btn);
+    });
+
+    playCue('success');
 }
 
 function evalCondition(cond) {
-    // Simple eval with safe scope
     try {
-        const scope = { inventory: variablesState.inventory, relationships: variablesState.relationships, flags: variablesState.flags, health: variablesState.health || 0 };
+        const scope = {
+            inventory: variablesState.inventory,
+            relationships: variablesState.relationships,
+            flags: variablesState.flags,
+            health: variablesState.health || 0
+        };
         // eslint-disable-next-line no-new-func
         return new Function(...Object.keys(scope), `return ${cond};`)(...Object.values(scope));
     } catch (e) {
@@ -58,19 +96,32 @@ function evalCondition(cond) {
     }
 }
 
+function parsePrimitiveValue(raw) {
+    const v = raw.trim();
+    if (v === 'true') return true;
+    if (v === 'false') return false;
+    const n = Number(v);
+    if (!Number.isNaN(n) && v !== '') return n;
+    return v;
+}
+
 function applyEffect(effect) {
     try {
-        const parts = effect.split(/\+=|-=/);
-        if (parts.length > 1) {
-            const path = parts[0].trim();
-            const op = effect.includes('+=') ? '+=' : '-=';
-            const val = Number(parts[1].trim());
-            const obj = getNested(variablesState, path);
-            if (obj) obj[Object.keys(obj)[0]] = obj[Object.keys(obj)[0]] + (op === '+=' ? val : -val);
-        } else if (effect.includes('=')) {
+        if (effect.includes('+=')) {
+            const [path, valStr] = effect.split('+=');
+            const current = Number(getNested(variablesState, path.trim()) || 0);
+            setNested(variablesState, path.trim(), current + Number(valStr.trim()));
+            return;
+        }
+        if (effect.includes('-=')) {
+            const [path, valStr] = effect.split('-=');
+            const current = Number(getNested(variablesState, path.trim()) || 0);
+            setNested(variablesState, path.trim(), current - Number(valStr.trim()));
+            return;
+        }
+        if (effect.includes('=')) {
             const [path, valStr] = effect.split('=');
-            const value = valStr.trim() === "true" ? true : valStr.trim() === "false" ? false : Number(valStr.trim());
-            setNested(variablesState, path.trim(), value);
+            setNested(variablesState, path.trim(), parsePrimitiveValue(valStr));
         }
     } catch (e) {
         console.error("Effect error", effect, e);
@@ -92,9 +143,8 @@ document.getElementById('restart').onclick = () => startPlayer('start');
 
 document.getElementById('save-progress').onclick = () => {
     const state = { currentPassage, variablesState, history };
-    const json = JSON.stringify(state);
-    const b64 = btoa(json);
-    downloadFile("progress.txt", "text/plain", b64);
+    const b64 = encodeProgress(state);
+    downloadFile('progress.txt', 'text/plain', b64);
 };
 
 document.getElementById('load-progress').onchange = (e) => {
@@ -103,14 +153,14 @@ document.getElementById('load-progress').onchange = (e) => {
     const reader = new FileReader();
     reader.onload = (ev) => {
         try {
-            const json = atob(ev.target.result);
-            const state = JSON.parse(json);
-            currentPassage = state.currentPassage;
-            variablesState = state.variablesState;
-            history = state.history;
+            const state = decodeProgress(ev.target.result);
+            currentPassage = state.currentPassage || 'start';
+            variablesState = normalizeVariables(state.variablesState || {});
+            history = Array.isArray(state.history) ? state.history : [];
             renderPassage();
         } catch (err) {
-            alert("Invalid progress file");
+            console.error(err);
+            alert('Invalid progress file');
         }
     };
     reader.readAsText(file);

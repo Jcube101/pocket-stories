@@ -10,6 +10,12 @@ Pocket Stories is a lightweight, fully static Choose-Your-Own-Adventure engine w
   - unreachable/orphaned passages (red)
 - Sidebar now includes a **Passage Search** panel to filter/focus nodes quickly.
 - Added **demo story hub**: [`demo.html`](demo.html)
+- Player mode now includes:
+  - fade transitions between passages
+  - typewriter text reveal
+  - subtle Web Audio cues for clicks/success/fail
+  - more robust save/load decoding (supports base64 and plain JSON progress files)
+  - linear “Export as Novel” replay from your played path
 
 ## Quickstart
 
@@ -51,12 +57,14 @@ Open [`demo.html`](demo.html) for sample stories:
 - Forest Adventure (default)
 - Space Outpost
 - City Noir
+- River Oath (new short story focused on relationships + inventory)
 
 You can also open a specific story directly:
 
 - `index.html?story=story.yaml`
 - `index.html?story=stories/space_outpost.yaml`
 - `index.html?story=stories/city_noir.yaml`
+- `index.html?story=stories/river_oath.yaml`
 
 ## Screenshots
 

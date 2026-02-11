@@ -458,3 +458,137 @@ h1 {
 .node.search-dim {
     opacity: 0.35;
 }
+
+/* Player mode UX */
+#player-mode {
+    flex-direction: column;
+}
+
+#top-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 12px;
+    background: #f0f0f0;
+    border-bottom: 1px solid #ddd;
+}
+
+#top-bar button,
+#top-bar label {
+    font-size: 0.95rem;
+    padding: 8px 12px;
+    border-radius: 8px;
+    border: 1px solid #ccc;
+    background: #fff;
+    cursor: pointer;
+}
+
+#top-bar label input {
+    display: none;
+}
+
+#passage-container {
+    max-width: 860px;
+    margin: 0 auto;
+    width: 100%;
+    padding: 18px;
+    box-sizing: border-box;
+}
+
+#passage-text {
+    min-height: 130px;
+    line-height: 1.65;
+    font-size: 1.1rem;
+    white-space: pre-wrap;
+    padding: 16px;
+    border-radius: 12px;
+    background: rgba(0,0,0,0.03);
+    margin-bottom: 16px;
+}
+
+#choices {
+    display: grid;
+    gap: 10px;
+}
+
+#choices button {
+    text-align: left;
+    padding: 12px 14px;
+    border: 1px solid #cbd5e1;
+    background: #fff;
+    border-radius: 10px;
+    cursor: pointer;
+}
+
+#choices button:hover {
+    border-color: #60a5fa;
+    background: #f8fbff;
+}
+
+.end-note {
+    color: #666;
+    font-style: italic;
+}
+
+.passage-fade {
+    animation: passageFade 280ms ease-out;
+}
+
+@keyframes passageFade {
+    from {
+        opacity: 0;
+        transform: translateY(4px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@media (max-width: 700px) {
+    #top-bar {
+        gap: 8px;
+        padding: 10px;
+    }
+
+    #top-bar button,
+    #top-bar label,
+    #choices button {
+        min-height: 48px;
+        font-size: 1rem;
+        padding: 12px 14px;
+    }
+
+    #passage-text {
+        font-size: 1.08rem;
+        min-height: 150px;
+    }
+}
+
+@media (prefers-color-scheme: dark) {
+    #top-bar {
+        background: #1f2937;
+        border-bottom-color: #374151;
+    }
+
+    #top-bar button,
+    #top-bar label {
+        background: #111827;
+        border-color: #374151;
+        color: #f3f4f6;
+    }
+
+    #passage-text {
+        background: rgba(255,255,255,0.06);
+    }
+
+    #choices button {
+        background: #111827;
+        color: #f3f4f6;
+        border-color: #374151;
+    }
+
+    .end-note {
+        color: #cbd5e1;
+    }
+}
