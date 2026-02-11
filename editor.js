@@ -13,21 +13,11 @@ let historyIndex = -1;
 const MAX_HISTORY = 20;
 let highlightedCycleNodes = new Set();
 let highlightedCycleEdges = new Set();
-let highlightedUnreachableNodes = new Set();
-let editorEventsBound = false;
-
-function normalizeVariables(v = {}) {
-    return {
-        inventory: v.inventory || {},
-        relationships: v.relationships || {},
-        flags: v.flags || {}
-    };
-}
 
 function cloneEditorState() {
     return {
         passages: JSON.parse(JSON.stringify(window.storyData.passages || {})),
-        variables: JSON.parse(JSON.stringify(normalizeVariables(window.storyData.variables)))
+        variables: JSON.parse(JSON.stringify(window.storyData.variables || { inventory: {}, relationships: {}, flags: {} }))
     };
 }
 
@@ -96,6 +86,12 @@ function initEditor() {
     window.storyData.variables = JSON.parse(JSON.stringify(variables));
     renderVariables();
     renderPassageList();
+
+    const searchInput = document.getElementById('passage-search');
+    if (searchInput) {
+        searchInput.value = '';
+        searchInput.oninput = () => applyPassageSearch(searchInput.value);
+    }
 
     const searchInput = document.getElementById('passage-search');
     if (searchInput) {
@@ -215,7 +211,44 @@ function bindEditorEvents() {
         }
     });
 
-    editorEventsBound = true;
+    // Prevent context menu on middle-click release
+    wrapper.addEventListener('contextmenu', e => {
+        if (e.button === 1) e.preventDefault();
+    });
+
+    // Double-click empty canvas to create a new passage
+    wrapper.addEventListener('dblclick', e => {
+        if (e.target.closest('.node')) return;
+
+        const newIdRaw = prompt('New passage ID', `passage_${Date.now()}`);
+        if (newIdRaw === null) return;
+        const newId = newIdRaw.trim();
+        if (!newId) {
+            alert('Passage ID cannot be empty.');
+            return;
+        }
+        if (window.storyData.passages[newId]) {
+            alert(`Passage "${newId}" already exists.`);
+            return;
+        }
+
+        const newText = prompt('Passage text', 'Write your passage text here...');
+        if (newText === null) return;
+
+        const x = Math.max(0, (e.clientX - pan.x) / scale - 160);
+        const y = Math.max(0, (e.clientY - pan.y) / scale - 100);
+
+        window.storyData.passages[newId] = {
+            text: `${newText}\n`,
+            choices: [],
+            position: { x, y }
+        };
+
+        createNode(newId, newText, Object.keys(window.storyData.passages).length);
+        drawConnections();
+        expandCanvasIfNeeded();
+        saveState();
+    });
 }
 
 function updateTransform() {
@@ -459,7 +492,7 @@ function drawConnections() {
                 path.classList.add('cycle-edge');
             }
 
-            // Right-click action menu for connection
+            // Right-click delete
             path.addEventListener('contextmenu', e => {
                 e.preventDefault();
                 const action = prompt('Connection action: type "edit" to edit, "delete" to remove.', 'edit');
@@ -506,13 +539,8 @@ function drawConnections() {
     });
 
     document.querySelectorAll('.node').forEach(node => {
-        const nodeId = node.dataset.id;
-        node.classList.toggle('cycle-node', highlightedCycleNodes.has(nodeId));
-        node.classList.toggle('unreachable-node', highlightedUnreachableNodes.has(nodeId));
+        node.classList.toggle('cycle-node', highlightedCycleNodes.has(node.dataset.id));
     });
-
-    const searchInput = document.getElementById('passage-search');
-    if (searchInput) applyPassageSearch(searchInput.value || '');
 }
 
 function fitToNodes() {
@@ -995,10 +1023,9 @@ function applyStateIncremental(state) {
     });
 
     window.storyData.passages = targetPassages;
-    window.storyData.variables = JSON.parse(JSON.stringify(normalizeVariables(state.variables)));
+    window.storyData.variables = JSON.parse(JSON.stringify(state.variables || { inventory: {}, relationships: {}, flags: {} }));
     variables = JSON.parse(JSON.stringify(window.storyData.variables));
     renderVariables();
-    renderPassageList();
 
     if (selectedNode && !window.storyData.passages[selectedNode.dataset.id]) {
         selectedNode = null;
