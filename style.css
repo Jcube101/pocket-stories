@@ -238,6 +238,17 @@ h1 {
     }
 }
 
+
+.cycle-node {
+    border-color: #f59e0b !important;
+    box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.5), 0 4px 12px rgba(0,0,0,0.15);
+}
+
+.connection-path.cycle-edge {
+    stroke: #f59e0b !important;
+    stroke-width: 5;
+}
+
 #svg-canvas text {
     fill: #e2e8f0;  /* light gray, readable on dark */
     font-weight: 500;
@@ -409,4 +420,41 @@ h1 {
     margin-right: 8px;         /* space before + Add button */
     border-radius: 6px;
     border: 1px solid #666;
+}
+
+.passage-list {
+    max-height: 160px;
+    overflow: auto;
+    border: 1px solid rgba(0,0,0,0.12);
+    border-radius: 8px;
+    padding: 6px;
+    margin-bottom: 12px;
+}
+
+.passage-item {
+    width: 100%;
+    text-align: left;
+    margin: 2px 0;
+    padding: 6px 8px;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    background: transparent;
+    cursor: pointer;
+}
+
+.passage-item:hover {
+    background: rgba(59, 130, 246, 0.12);
+}
+
+.node.unreachable-node {
+    border-color: #ef4444 !important;
+    box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.45), 0 4px 12px rgba(0,0,0,0.15);
+}
+
+.node.search-match {
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.35), 0 4px 12px rgba(0,0,0,0.15);
+}
+
+.node.search-dim {
+    opacity: 0.35;
 }

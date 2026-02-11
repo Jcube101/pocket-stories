@@ -35,6 +35,10 @@
                     </div>
                 </div>
 
+                <h2>Passages</h2>
+                <input type="text" id="passage-search" placeholder="Search passage id/text..." style="width:100%; box-sizing:border-box; margin-bottom:8px;">
+                <div id="passage-list" class="passage-list"></div>
+
                 <h2>Tools</h2>
                 <button id="branching-script">View as Branching Script</button>
                 <button id="export-yaml">Export story.yaml</button>
@@ -107,12 +111,16 @@
             playerMode.classList.remove('hidden');
             editorBtn.classList.remove('active');
             playerBtn.classList.add('active');
-            startPlayer();
+            const startFrom = window.__playerStartPassage || 'start';
+            window.__playerStartPassage = null;
+            startPlayer(startFrom);
         });
 
         document.getElementById('back-editor').addEventListener('click', () => editorBtn.click());
 
-        fetch('story.yaml')
+        const storyFile = new URLSearchParams(window.location.search).get('story') || 'story.yaml';
+
+        fetch(storyFile)
             .then(r => r.text())
             .then(text => {
                 window.storyData = jsyaml.load(text);
