@@ -10,20 +10,41 @@ let connectingFrom = null;
 let selectedNode = null;
 let selectedConnection = null; // not used yet, but preparing for future
 let undoStack = [];
-let redoStack = [];
+let historyIndex = -1;
 const MAX_HISTORY = 20;
+let highlightedCycleNodes = new Set();
+let highlightedCycleEdges = new Set();
+let highlightedUnreachableNodes = new Set();
 
-function saveState() {
-    // Deep copy essential data
-    const state = {
-        passages: JSON.parse(JSON.stringify(window.storyData.passages)),
-        // If you later add node positions to storyData, include them here
+function cloneEditorState() {
+    return {
+        passages: JSON.parse(JSON.stringify(window.storyData.passages || {})),
+        variables: JSON.parse(JSON.stringify(window.storyData.variables || { inventory: {}, relationships: {}, flags: {} }))
     };
+}
+
+function saveState(options = {}) {
+    if (options.resetHistory) {
+        undoStack = [];
+        historyIndex = -1;
+    }
+
+    const state = cloneEditorState();
+
+    if (historyIndex < undoStack.length - 1) {
+        undoStack = undoStack.slice(0, historyIndex + 1);
+    }
+
     undoStack.push(state);
     if (undoStack.length > MAX_HISTORY) {
         undoStack.shift();
+    } else {
+        historyIndex += 1;
     }
-    redoStack = []; // clear redo when new action occurs
+
+    if (undoStack.length === MAX_HISTORY && historyIndex >= MAX_HISTORY) {
+        historyIndex = MAX_HISTORY - 1;
+    }
 }
 
 function initEditor() {
@@ -67,10 +88,21 @@ function initEditor() {
     // Draw connections
     drawConnections();
     expandCanvasIfNeeded();  // ensure initial size is sufficient
+    fitToNodes();
+
+    // Initialize undo/redo baseline for current story
+    saveState({ resetHistory: true });
 
     // Variables sidebar
     variables = JSON.parse(JSON.stringify(window.storyData.variables));
     renderVariables();
+    renderPassageList();
+
+    const searchInput = document.getElementById('passage-search');
+    if (searchInput) {
+        searchInput.value = '';
+        searchInput.oninput = () => applyPassageSearch(searchInput.value);
+    }
 
     // Canvas interactions
     nodesContainer.addEventListener('mousedown', e => {
@@ -139,6 +171,41 @@ function initEditor() {
     // Prevent context menu on middle-click release
     wrapper.addEventListener('contextmenu', e => {
         if (e.button === 1) e.preventDefault();
+    });
+
+    // Double-click empty canvas to create a new passage
+    wrapper.addEventListener('dblclick', e => {
+        if (e.target.closest('.node')) return;
+
+        const newIdRaw = prompt('New passage ID', `passage_${Date.now()}`);
+        if (newIdRaw === null) return;
+        const newId = newIdRaw.trim();
+        if (!newId) {
+            alert('Passage ID cannot be empty.');
+            return;
+        }
+        if (window.storyData.passages[newId]) {
+            alert(`Passage "${newId}" already exists.`);
+            return;
+        }
+
+        const newText = prompt('Passage text', 'Write your passage text here...');
+        if (newText === null) return;
+
+        const x = Math.max(0, (e.clientX - pan.x) / scale - 160);
+        const y = Math.max(0, (e.clientY - pan.y) / scale - 100);
+
+        window.storyData.passages[newId] = {
+            text: `${newText}\n`,
+            choices: [],
+            position: { x, y }
+        };
+
+        createNode(newId, newText, Object.keys(window.storyData.passages).length);
+        renderPassageList();
+        drawConnections();
+        expandCanvasIfNeeded();
+        saveState();
     });
 }
 
@@ -251,6 +318,7 @@ function createNode(id, text, index) {
             window.storyData.passages[newId] = JSON.parse(JSON.stringify(window.storyData.passages[id]));
             delete window.storyData.passages[id];
             nodeDiv.dataset.id = newId;
+            renderPassageList();
             drawConnections();
             saveState();
         }
@@ -275,6 +343,16 @@ function createNode(id, text, index) {
         if (selectedNode) selectedNode.classList.remove('selected');
         selectedNode = nodeDiv;
         nodeDiv.classList.add('selected');
+    });
+
+    nodeDiv.addEventListener('contextmenu', e => {
+        if (e.target.classList.contains('node-output') || e.target.isContentEditable) return;
+        e.preventDefault();
+        const nodeId = nodeDiv.dataset.id;
+        if (confirm(`Test from here? Start Player Mode at "${nodeId}".`)) {
+            window.__playerStartPassage = nodeId;
+            document.getElementById('player-btn').click();
+        }
     });
 
     nodesContainer.appendChild(nodeDiv);
@@ -367,6 +445,11 @@ function drawConnections() {
                 path.classList.add('selected');
             });
 
+            const edgeKey = `${id}->${ch.target}`;
+            if (highlightedCycleEdges.has(edgeKey)) {
+                path.classList.add('cycle-edge');
+            }
+
             // Right-click delete
             path.addEventListener('contextmenu', e => {
                 e.preventDefault();
@@ -406,6 +489,15 @@ function drawConnections() {
             });
         });
     });
+
+    document.querySelectorAll('.node').forEach(node => {
+        const nodeId = node.dataset.id;
+        node.classList.toggle('cycle-node', highlightedCycleNodes.has(nodeId));
+        node.classList.toggle('unreachable-node', highlightedUnreachableNodes.has(nodeId));
+    });
+
+    const searchInput = document.getElementById('passage-search');
+    if (searchInput) applyPassageSearch(searchInput.value || '');
 }
 
 function fitToNodes() {
@@ -430,6 +522,56 @@ function fitToNodes() {
     pan.x = (canvasW - width * scale) / 2 + 150;
     pan.y = (canvasH - height * scale) / 2;
     updateTransform();
+}
+
+function renderPassageList() {
+    const list = document.getElementById('passage-list');
+    if (!list) return;
+    list.innerHTML = '';
+
+    const ids = Object.keys(window.storyData.passages || {}).sort();
+    ids.forEach(id => {
+        const item = document.createElement('button');
+        item.type = 'button';
+        item.className = 'passage-item';
+        item.textContent = id;
+        item.onclick = () => {
+            const node = document.querySelector(`.node[data-id="${id}"]`);
+            if (!node) return;
+            if (selectedNode) selectedNode.classList.remove('selected');
+            selectedNode = node;
+            node.classList.add('selected');
+            const x = parseFloat(node.style.left);
+            const y = parseFloat(node.style.top);
+            pan.x = Math.max(0, window.innerWidth / 2 - x * scale - 180);
+            pan.y = Math.max(0, window.innerHeight / 2 - y * scale - 120);
+            updateTransform();
+        };
+        list.appendChild(item);
+    });
+}
+
+function applyPassageSearch(rawTerm) {
+    const term = (rawTerm || '').trim().toLowerCase();
+    const ids = Object.keys(window.storyData.passages || {});
+
+    ids.forEach(id => {
+        const node = document.querySelector(`.node[data-id="${id}"]`);
+        if (!node) return;
+
+        const text = (window.storyData.passages[id].text || '').toLowerCase();
+        const match = !term || id.toLowerCase().includes(term) || text.includes(term);
+        node.classList.toggle('search-match', !!term && match);
+        node.classList.toggle('search-dim', !!term && !match);
+    });
+
+    const listItems = document.querySelectorAll('#passage-list .passage-item');
+    listItems.forEach(btn => {
+        const id = btn.textContent || '';
+        const text = (window.storyData.passages[id]?.text || '').toLowerCase();
+        const match = !term || id.toLowerCase().includes(term) || text.includes(term);
+        btn.classList.toggle('hidden', !!term && !match);
+    });
 }
 
 function renderVariables() {
@@ -652,11 +794,35 @@ function validateStory() {
             });
         }
     }
+    const unreachable = new Set();
     for (const id of ids) {
         if (id !== 'start' && !reachable.has(id)) {
             issues.push(`Unreachable passage: "${id}"`);
+            unreachable.add(id);
         }
     }
+
+    const cycles = findCycles(passages);
+    if (cycles.length > 0) {
+        cycles.forEach((cycle, idx) => {
+            issues.push(`Cycle ${idx + 1}: ${cycle.join(' → ')} → ${cycle[0]}`);
+        });
+    }
+
+    const cycleNodes = new Set();
+    const cycleEdges = new Set();
+    cycles.forEach(cycle => {
+        for (let i = 0; i < cycle.length; i += 1) {
+            const from = cycle[i];
+            const to = cycle[(i + 1) % cycle.length];
+            cycleNodes.add(from);
+            cycleEdges.add(`${from}->${to}`);
+        }
+    });
+    highlightedCycleNodes = cycleNodes;
+    highlightedCycleEdges = cycleEdges;
+    highlightedUnreachableNodes = unreachable;
+    drawConnections();
 
     // Report
     if (issues.length === 0) {
@@ -674,6 +840,63 @@ function validateStory() {
         html += `</ul>`;
         showModal(html);
     }
+}
+
+function findCycles(passages) {
+    const ids = Object.keys(passages);
+    const visited = new Set();
+    const onStack = new Set();
+    const stack = [];
+    const cycleSignatures = new Set();
+    const cycles = [];
+
+    function normalizeCycle(cycleIds) {
+        let best = null;
+        for (let i = 0; i < cycleIds.length; i += 1) {
+            const rotated = cycleIds.slice(i).concat(cycleIds.slice(0, i));
+            const signature = rotated.join('->');
+            if (best === null || signature < best) best = signature;
+        }
+        return best;
+    }
+
+    function dfs(id) {
+        visited.add(id);
+        onStack.add(id);
+        stack.push(id);
+
+        const choices = passages[id]?.choices || [];
+        choices.forEach(ch => {
+            const target = ch.target;
+            if (!passages[target]) return;
+
+            if (!visited.has(target)) {
+                dfs(target);
+                return;
+            }
+
+            if (onStack.has(target)) {
+                const idx = stack.indexOf(target);
+                if (idx >= 0) {
+                    const cycle = stack.slice(idx);
+                    const signature = normalizeCycle(cycle);
+                    if (!cycleSignatures.has(signature)) {
+                        cycleSignatures.add(signature);
+                        cycles.push(cycle);
+                    }
+                }
+            }
+        });
+
+        stack.pop();
+        onStack.delete(id);
+    }
+
+    ids.forEach(id => {
+        if (!visited.has(id)) dfs(id);
+    });
+
+    return cycles;
 }
 
 function expandCanvasIfNeeded() {
@@ -702,35 +925,78 @@ function expandCanvasIfNeeded() {
 }
 
 function undo() {
-    if (undoStack.length === 0) return;
-
-    // Save current state to redo stack
-    redoStack.push({
-        passages: JSON.parse(JSON.stringify(window.storyData.passages))
-    });
-
-    // Restore previous state
-    const previous = undoStack.pop();
-    window.storyData.passages = previous.passages;
-
-    // Rebuild UI
-    initEditor(); // this will recreate all nodes & connections
+    if (historyIndex <= 0) return;
+    historyIndex -= 1;
+    applyStateIncremental(undoStack[historyIndex]);
 }
 
 function redo() {
-    if (redoStack.length === 0) return;
+    if (historyIndex >= undoStack.length - 1) return;
+    historyIndex += 1;
+    applyStateIncremental(undoStack[historyIndex]);
+}
 
-    // Save current state to undo stack
-    undoStack.push({
-        passages: JSON.parse(JSON.stringify(window.storyData.passages))
+function applyStateIncremental(state) {
+    if (!state) return;
+
+    const targetPassages = JSON.parse(JSON.stringify(state.passages || {}));
+    const existingNodes = new Map(Array.from(document.querySelectorAll('.node')).map(node => [node.dataset.id, node]));
+
+    // Remove nodes no longer present
+    existingNodes.forEach((node, id) => {
+        if (!targetPassages[id]) {
+            node.remove();
+        }
     });
 
-    // Restore next state
-    const next = redoStack.pop();
-    window.storyData.passages = next.passages;
+    // Add missing nodes
+    Object.keys(targetPassages).forEach((id, index) => {
+        if (!existingNodes.has(id)) {
+            createNode(id, (targetPassages[id].text || '').trim(), index);
+        }
+    });
 
-    // Rebuild UI
-    initEditor();
+    // Update existing node content/position
+    Object.keys(targetPassages).forEach(id => {
+        const node = document.querySelector(`.node[data-id="${id}"]`);
+        if (!node) return;
+        const p = targetPassages[id];
+
+        const title = node.querySelector('.node-title');
+        if (title && title.textContent.trim() !== id) {
+            title.textContent = id;
+        }
+
+        const text = node.querySelector('.node-text');
+        const trimmed = (p.text || '').trim();
+        if (text && text.textContent !== trimmed) {
+            text.textContent = trimmed;
+        }
+
+        if (p.position) {
+            node.style.left = `${p.position.x}px`;
+            node.style.top = `${p.position.y}px`;
+        }
+    });
+
+    window.storyData.passages = targetPassages;
+    window.storyData.variables = JSON.parse(JSON.stringify(state.variables || { inventory: {}, relationships: {}, flags: {} }));
+    variables = JSON.parse(JSON.stringify(window.storyData.variables));
+    renderVariables();
+    renderPassageList();
+
+    const searchInput = document.getElementById('passage-search');
+    if (searchInput) {
+        searchInput.value = '';
+        searchInput.oninput = () => applyPassageSearch(searchInput.value);
+    }
+
+    if (selectedNode && !window.storyData.passages[selectedNode.dataset.id]) {
+        selectedNode = null;
+    }
+
+    drawConnections();
+    expandCanvasIfNeeded();
 }
 
 // Import handler — rebuild with new node creation
@@ -760,7 +1026,21 @@ document.addEventListener('keydown', e => {
     // Delete selected node
     if ((e.key === 'Delete' || e.key === 'Backspace') && selectedNode) {
         const id = selectedNode.dataset.id;
-        if (confirm(`Delete passage "${id}" and all connections to/from it?`)) {
+        const incoming = Object.keys(window.storyData.passages).filter(pid =>
+            (window.storyData.passages[pid].choices || []).some(ch => ch.target === id)
+        );
+        const outgoing = (window.storyData.passages[id]?.choices || []).map(ch => ch.target);
+
+        const warnings = [];
+        if (id === 'start') {
+            warnings.push('You are deleting the START passage. The story may become unplayable.');
+        }
+        if (incoming.length > 0 || outgoing.length > 0) {
+            warnings.push(`This node has ${incoming.length} incoming and ${outgoing.length} outgoing connection(s).`);
+        }
+
+        const message = `${warnings.length ? `⚠ ${warnings.join('\n')}` : ''}\n\nDelete passage "${id}" and all connections to/from it?`;
+        if (confirm(message.trim())) {
             delete window.storyData.passages[id];
             // Remove incoming connections
             Object.keys(window.storyData.passages).forEach(pid => {
@@ -770,6 +1050,7 @@ document.addEventListener('keydown', e => {
             });
             selectedNode.remove();
             selectedNode = null;
+            renderPassageList();
             drawConnections();
             saveState(); // ← add here
         }
