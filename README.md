@@ -61,7 +61,7 @@ Open [`demo.html`](demo.html) for sample stories:
 
 You can also open a specific story directly:
 
-- `index.html?story=story.yaml`
+- `index.html?story=stories/forest_adventure.yaml`
 - `index.html?story=stories/space_outpost.yaml`
 - `index.html?story=stories/city_noir.yaml`
 - `index.html?story=stories/river_oath.yaml`

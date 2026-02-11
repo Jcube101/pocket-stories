@@ -21,13 +21,72 @@ function initPlayer() {
 }
 
 function startPlayer(startPassage = "start") {
-    variablesState = JSON.parse(JSON.stringify(window.storyData.variables));
+    variablesState = JSON.parse(JSON.stringify(normalizeVariables(window.storyData.variables)));
     currentPassage = window.storyData.passages[startPassage] ? startPassage : "start";
     history = [];
     renderPassage();
 }
 
 window.startPlayer = startPlayer;
+
+function getAudioContext() {
+    if (!audioCtx && window.AudioContext) {
+        audioCtx = new AudioContext();
+    }
+    if (audioCtx && audioCtx.state === 'suspended') {
+        audioCtx.resume().catch(() => {});
+    }
+    return audioCtx;
+}
+
+function playCue(type = 'click') {
+    const ctx = getAudioContext();
+    if (!ctx) return;
+
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+
+    if (type === 'success') {
+        osc.frequency.setValueAtTime(660, ctx.currentTime);
+    } else if (type === 'fail') {
+        osc.frequency.setValueAtTime(200, ctx.currentTime);
+    } else {
+        osc.frequency.setValueAtTime(420, ctx.currentTime);
+    }
+
+    gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.035, ctx.currentTime + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.1);
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.11);
+}
+
+function revealTextTypewriter(el, text, token) {
+    const reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduceMotion) {
+        el.textContent = text;
+        return;
+    }
+
+    const chars = Array.from(text);
+    const stepMs = text.length > 350 ? 5 : 12;
+    let i = 0;
+    el.textContent = '';
+
+    const tick = () => {
+        if (token !== renderToken) return;
+        if (i >= chars.length) return;
+        i += 1;
+        el.textContent = chars.slice(0, i).join('');
+        window.setTimeout(tick, stepMs);
+    };
+
+    tick();
+}
 
 function renderPassage() {
     renderToken += 1;
@@ -139,6 +198,48 @@ function setNested(obj, path, value) {
     target[last] = value;
 }
 
+function encodeProgress(state) {
+    return btoa(unescape(encodeURIComponent(JSON.stringify(state))));
+}
+
+function decodeProgress(text) {
+    const raw = (text || '').trim();
+    if (!raw) throw new Error('empty file');
+
+    // 1) Plain JSON support
+    if (raw.startsWith('{')) {
+        return JSON.parse(raw);
+    }
+
+    // 2) URL-safe base64
+    const normalized = raw.replace(/-/g, '+').replace(/_/g, '/');
+    const padded = normalized + '='.repeat((4 - normalized.length % 4) % 4);
+
+    // 3) Standard base64
+    const decoded = decodeURIComponent(escape(atob(padded)));
+    return JSON.parse(decoded);
+}
+
+function buildLinearReplayText() {
+    const parts = [];
+    history.forEach((h, idx) => {
+        const p = window.storyData.passages[h.passage];
+        if (!p) return;
+        parts.push(`[${idx + 1}] ${h.passage}`);
+        parts.push(p.text.trim());
+        parts.push(`You chose: "${h.choiceText}" -> ${h.target}`);
+        parts.push('');
+    });
+
+    const finalP = window.storyData.passages[currentPassage];
+    if (finalP) {
+        parts.push(`[Final] ${currentPassage}`);
+        parts.push(finalP.text.trim());
+    }
+
+    return parts.join('\n');
+}
+
 document.getElementById('restart').onclick = () => startPlayer('start');
 
 document.getElementById('save-progress').onclick = () => {
@@ -167,15 +268,6 @@ document.getElementById('load-progress').onchange = (e) => {
 };
 
 document.getElementById('export-novel').onclick = () => {
-    let novel = "";
-    history.forEach((h, i) => {
-        const p = window.storyData.passages[h.passage];
-        novel += p.text.trim() + "\n\n";
-        if (i < history.length - 1 || currentPassage !== "start") {
-            novel += "You chose: \"" + h.choiceText + "\"\n\n";
-        }
-    });
-    const finalP = window.storyData.passages[currentPassage];
-    if (finalP) novel += finalP.text.trim() + "\n\n";
-    downloadFile("my-story.txt", "text/plain", novel);
+    const novel = buildLinearReplayText();
+    downloadFile('my-story.txt', 'text/plain', novel);
 };
