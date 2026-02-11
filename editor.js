@@ -8,7 +8,6 @@ let isPanning = false;
 let panStart = { x: 0, y: 0 };
 let connectingFrom = null;
 let selectedNode = null;
-let selectedConnection = null; // not used yet, but preparing for future
 let undoStack = [];
 let historyIndex = -1;
 const MAX_HISTORY = 20;
@@ -50,16 +49,6 @@ function initEditor() {
     nodesContainer = document.getElementById('nodes-container');
     svgCanvas = document.getElementById('svg-canvas');
 
-    // Deselect on canvas click
-    nodesContainer.addEventListener('click', e => {
-        if (e.target === nodesContainer || e.target === svgCanvas) {
-            if (selectedNode) {
-                selectedNode.classList.remove('selected');
-                selectedNode = null;
-            }
-        }
-    });
-
     // Clear previous content
     nodesContainer.innerHTML = '';
     svgCanvas.innerHTML = `<defs>
@@ -93,7 +82,8 @@ function initEditor() {
     saveState({ resetHistory: true });
 
     // Variables sidebar
-    variables = JSON.parse(JSON.stringify(window.storyData.variables));
+    variables = JSON.parse(JSON.stringify(normalizeVariables(window.storyData.variables)));
+    window.storyData.variables = JSON.parse(JSON.stringify(variables));
     renderVariables();
     renderPassageList();
 
@@ -103,7 +93,78 @@ function initEditor() {
         searchInput.oninput = () => applyPassageSearch(searchInput.value);
     }
 
-    // Canvas interactions
+    const searchInput = document.getElementById('passage-search');
+    if (searchInput) {
+        searchInput.value = '';
+        searchInput.oninput = () => applyPassageSearch(searchInput.value);
+    }
+
+    bindEditorEvents();
+
+    // Wheel zoom (screen-centered, no drift)
+    nodesContainer.onwheel = e => {
+        e.preventDefault();
+        const factor = e.deltaY < 0 ? 1.1 : 0.9;
+        scale = Math.max(0.3, Math.min(scale * factor, 2));
+        updateTransform();
+    };
+
+    // Zoom buttons
+    document.getElementById('zoom-in').onclick = () => { scale = Math.min(scale * 1.2, 2); updateTransform(); };
+    document.getElementById('zoom-out').onclick = () => { scale = Math.max(scale / 1.2, 0.3); updateTransform(); };
+    document.getElementById('zoom-reset').onclick = () => { scale = 1; pan = { x: 0, y: 0 }; updateTransform(); };
+    document.getElementById('zoom-fit').onclick = fitToNodes;
+
+    const wrapper = document.getElementById('canvas-wrapper');
+    wrapper.ondblclick = e => {
+        if (e.target.closest('.node')) return;
+
+        const newIdRaw = prompt('New passage ID', `passage_${Date.now()}`);
+        if (newIdRaw === null) return;
+        const newId = newIdRaw.trim();
+        if (!newId) {
+            alert('Passage ID cannot be empty.');
+            return;
+        }
+        if (window.storyData.passages[newId]) {
+            alert(`Passage "${newId}" already exists.`);
+            return;
+        }
+
+        const newText = prompt('Passage text', 'Write your passage text here...');
+        if (newText === null) return;
+
+        const x = Math.max(0, (e.clientX - pan.x) / scale - 160);
+        const y = Math.max(0, (e.clientY - pan.y) / scale - 100);
+
+        window.storyData.passages[newId] = {
+            text: `${newText}\n`,
+            choices: [],
+            position: { x, y }
+        };
+
+        createNode(newId, newText, Object.keys(window.storyData.passages).length);
+        renderPassageList();
+        drawConnections();
+        expandCanvasIfNeeded();
+        saveState();
+    };
+}
+
+function bindEditorEvents() {
+    if (editorEventsBound) return;
+
+    const wrapper = document.getElementById('canvas-wrapper');
+
+    nodesContainer.addEventListener('click', e => {
+        if (e.target === nodesContainer || e.target === svgCanvas) {
+            if (selectedNode) {
+                selectedNode.classList.remove('selected');
+                selectedNode = null;
+            }
+        }
+    });
+
     nodesContainer.addEventListener('mousedown', e => {
         if (e.target === nodesContainer || e.target === svgCanvas) {
             isPanning = true;
@@ -112,26 +173,6 @@ function initEditor() {
         }
     });
 
-    // Wheel zoom (screen-centered, no drift)
-    nodesContainer.addEventListener('wheel', e => {
-        e.preventDefault();
-        const factor = e.deltaY < 0 ? 1.1 : 0.9;
-        scale = Math.max(0.3, Math.min(scale * factor, 2));
-        updateTransform();
-    }, { passive: false });
-
-    // Zoom buttons
-    document.getElementById('zoom-in').onclick = () => { scale = Math.min(scale * 1.2, 2); updateTransform(); };
-    document.getElementById('zoom-out').onclick = () => { scale = Math.max(scale / 1.2, 0.3); updateTransform(); };
-    document.getElementById('zoom-reset').onclick = () => { scale = 1; pan = { x: 0, y: 0 }; updateTransform(); };
-    document.getElementById('zoom-fit').onclick = fitToNodes;
-
-    // Middle-click panning on the wrapper
-    const wrapper = document.getElementById('canvas-wrapper');
-    let isPanning = false;
-    let panStart = { x: 0, y: 0 };
-
-    // Deselect on background
     wrapper.addEventListener('click', e => {
         if (e.target === wrapper || e.target === svgCanvas) {
             if (selectedNode) {
@@ -143,7 +184,7 @@ function initEditor() {
     });
 
     wrapper.addEventListener('mousedown', e => {
-        if (e.button === 1) {  // middle mouse button
+        if (e.button === 1) {
             isPanning = true;
             panStart.x = e.clientX - pan.x;
             panStart.y = e.clientY - pan.y;
@@ -152,12 +193,15 @@ function initEditor() {
         }
     });
 
+    wrapper.addEventListener('contextmenu', e => {
+        if (e.button === 1) e.preventDefault();
+    });
+
     document.addEventListener('mousemove', e => {
-        if (isPanning) {
-            pan.x = e.clientX - panStart.x;
-            pan.y = e.clientY - panStart.y;
-            updateTransform();
-        }
+        if (!isPanning) return;
+        pan.x = e.clientX - panStart.x;
+        pan.y = e.clientY - panStart.y;
+        updateTransform();
     });
 
     document.addEventListener('mouseup', e => {
@@ -367,7 +411,7 @@ document.addEventListener('mouseup', e => {
                 if (!window.storyData.passages[fromId].choices) window.storyData.passages[fromId].choices = [];
                 window.storyData.passages[fromId].choices.push({ text, target: toId });
                 drawConnections();
-                saveState(); // ← add here
+                saveState();
             }
         }
     }
@@ -451,11 +495,28 @@ function drawConnections() {
             // Right-click delete
             path.addEventListener('contextmenu', e => {
                 e.preventDefault();
-                if (confirm(`Delete connection "${ch.text || 'Continue'}" from ${id} to ${ch.target}?`)) {
-                    window.storyData.passages[id].choices.splice(choiceIndex, 1);
-                    drawConnections();
-                    saveState();
+                const action = prompt('Connection action: type "edit" to edit, "delete" to remove.', 'edit');
+                if (!action) return;
+
+                if (action.toLowerCase() === 'delete') {
+                    if (confirm(`Delete connection "${ch.text || 'Continue'}" from ${id} to ${ch.target}?`)) {
+                        window.storyData.passages[id].choices.splice(choiceIndex, 1);
+                        drawConnections();
+                        saveState();
+                    }
+                    return;
                 }
+
+                if (action.toLowerCase() !== 'edit') return;
+
+                const newText = prompt('Choice text', ch.text || '');
+                if (newText !== null) ch.text = newText || undefined;
+                const cond = prompt('Condition (optional)', ch.condition || '');
+                if (cond !== null) ch.condition = cond || undefined;
+                const eff = prompt('Effect (optional)', ch.effect || '');
+                if (eff !== null) ch.effect = eff || undefined;
+                drawConnections();
+                saveState();
             });
 
             // Label
@@ -474,17 +535,6 @@ function drawConnections() {
             text.appendChild(textPath);
             svgCanvas.appendChild(text);
 
-            // Right-click edit (kept separate from delete for safety)
-            path.addEventListener('contextmenu', e => {
-                e.preventDefault();
-                const newText = prompt("Choice text", ch.text || "");
-                if (newText !== null) ch.text = newText || undefined;
-                const cond = prompt("Condition (optional)", ch.condition || "");
-                if (cond !== null) ch.condition = cond || undefined;
-                const eff = prompt("Effect (optional)", ch.effect || "");
-                if (eff !== null) ch.effect = eff || undefined;
-                drawConnections();
-            });
         });
     });
 
@@ -996,7 +1046,8 @@ document.getElementById('load-story').addEventListener('change', e => {
             const newData = jsyaml.load(yamlText);
             if (!newData.passages) throw "Invalid story";
             window.storyData = newData;
-            variables = JSON.parse(JSON.stringify(newData.variables || { inventory: {}, relationships: {}, flags: {} }));
+            variables = JSON.parse(JSON.stringify(normalizeVariables(newData.variables)));
+            newData.variables = JSON.parse(JSON.stringify(variables));
             initEditor(); // Rebuild everything
             alert("Story loaded successfully!");
         } catch (err) {
@@ -1038,7 +1089,7 @@ document.addEventListener('keydown', e => {
             selectedNode = null;
             renderPassageList();
             drawConnections();
-            saveState(); // ← add here
+            saveState();
         }
     }
 
@@ -1072,7 +1123,6 @@ const btnValidate = document.getElementById('validate-story');
 const btnExport = document.getElementById('export-yaml');
 const btnBranching = document.getElementById('branching-script');
 const btnPlay = document.getElementById('play-story');
-const btnAddVar = document.getElementById('add-var');
 const sidebar = document.getElementById('sidebar');
 const graphContainer = document.getElementById('graph-container');
 const toggleBtn = document.getElementById('toggle-sidebar');
