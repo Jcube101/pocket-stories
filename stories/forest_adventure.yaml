@@ -4,12 +4,16 @@ variables:
     key: false
     sword: 0
     potion: 0
+    dragon_scale: false
+    map_fragment: false
   relationships:
     Alice: 0
     Guard: 0
+    Dragon: 0
   flags:
     met_dragon: false
     opened_gate: false
+    promised_alice: false
 
 passages:
   start:
@@ -23,6 +27,17 @@ passages:
       - text: "Search your pockets"
         target: pockets
         condition: "inventory.key == false"
+      - text: "Check the old satchel"
+        target: satchel
+        condition: "inventory.map_fragment == false"
+
+  satchel:
+    text: |
+      You find a torn map fragment tucked beside a rusted coin.
+    choices:
+      - text: "Keep the fragment"
+        target: clearing
+        effect: "inventory.map_fragment = true"
 
   pockets:
     text: |
@@ -42,8 +57,19 @@ passages:
       - text: "Ask for directions rudely"
         target: alice_neutral
         effect: "relationships.Alice -= 2"
+      - text: "Promise to share treasure if you survive"
+        target: alice_promise
+        effect: "flags.promised_alice = true"
       - text: "Ignore her and look around"
         target: clearing_look
+
+  alice_promise:
+    text: |
+      Alice nods. "Then don't rush in blind. The dragon respects courage and gifts."
+    choices:
+      - text: "Thank her"
+        target: clearing_look
+        effect: "relationships.Alice += 1"
 
   clearing_look:
     text: |
@@ -78,6 +104,10 @@ passages:
       - text: "Try to open the gate with the key"
         target: gate_open
         condition: "inventory.key == true"
+      - text: "Show map fragment as proof of your quest"
+        target: gate_open
+        condition: "inventory.map_fragment == true"
+        effect: "relationships.Guard += 1"
 
   guard_talk:
     text: |
@@ -107,7 +137,7 @@ passages:
 
   gate_open:
     text: |
-      The key fits! The gate creaks open. You enter the castle courtyard.
+      The gate creaks open. You enter the castle courtyard.
     choices:
       - text: "Proceed inside"
         target: dragon_chamber
@@ -120,7 +150,22 @@ passages:
       - text: "Sneak past"
         target: good_end_treasure
         condition: "relationships.Alice >= 3"
+      - text: "Offer your potion as tribute"
+        target: dragon_bargain
+        condition: "inventory.potion >= 1"
+        effect: "relationships.Dragon += 2"
       - text: "Wake the dragon and fight"
+        target: dragon_fight
+        effect: "flags.met_dragon = true"
+
+  dragon_bargain:
+    text: |
+      The dragon opens one eye and accepts the potion with surprising grace.
+    choices:
+      - text: "Ask for safe passage"
+        target: good_end_treasure
+        condition: "relationships.Dragon >= 2"
+      - text: "Demand treasure now"
         target: dragon_fight
 
   dragon_fight:
@@ -130,7 +175,9 @@ passages:
 
   good_end_treasure:
     text: |
-      Thanks to Alice's friendship, you feel lucky. You grab the treasure and escape unharmed.
+      Thanks to your choices and allies, you claim the treasure and escape unharmed.
+
+      If you promised Alice, you return with enough gold to change both your fates.
 
       Congratulations! You win.
     choices: []

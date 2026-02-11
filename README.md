@@ -1,41 +1,87 @@
-# README.md
-
 # Pocket Stories
 
-A lightweight, fully static Choose-Your-Own-Adventure engine with a visual node-based editor. Built entirely with HTML, CSS, and vanilla JavaScript — perfect for deployment on GitHub Pages.
+Pocket Stories is a lightweight, fully static Choose-Your-Own-Adventure engine with a visual graph editor and built-in player. It runs with plain HTML/CSS/JavaScript and works well on GitHub Pages.
 
-## Features
+## What’s New
 
-- Visual editor using LiteGraph.js
-- Play mode with conditional choices and variable effects
-- Save/load progress
-- Export playthrough as a linear novel
-- Export story as YAML
-- Branching script view for authors
-- Mobile-responsive, clean design
+- Right-click any node and choose **“Test from here”** to jump straight into Player Mode at that passage.
+- Validation now highlights:
+  - cycles/loops (amber)
+  - unreachable/orphaned passages (red)
+- Sidebar now includes a **Passage Search** panel to filter/focus nodes quickly.
+- Added **demo story hub**: [`demo.html`](demo.html)
+- Player mode now includes:
+  - fade transitions between passages
+  - typewriter text reveal
+  - subtle Web Audio cues for clicks/success/fail
+  - more robust save/load decoding (supports base64 and plain JSON progress files)
+  - linear “Export as Novel” replay from your played path
 
-## How to Use
+## Quickstart
 
-1. Open `index.html` in your browser (or deploy to GitHub Pages).
-2. By default, you're in **Editor Mode**:
-   - Drag from the right side of a passage node to create choices.
-   - Right-click a connection → "Edit Choice" to set text, condition, and effect.
-   - Add global variables in the sidebar.
-   - Use the tools to export or play.
-3. Switch to **Player Mode** to test your story.
-   - Save progress and reload later.
-   - Export your playthrough as a readable novel.
+1. Open [`index.html`](index.html) in a browser.
+2. Edit your story in **Editor Mode**:
+   - Double-click empty canvas to add a new passage.
+   - Drag from a node output dot to connect passages.
+   - Right-click a connection to edit choice text / condition / effect.
+   - Right-click a node to test from that node.
+3. Click **Validate Story** to find broken links, unreachable nodes, and cycles.
+4. Click **Play Story** to test normally from `start`.
+5. Export with **Export story.yaml**.
 
-## Deployment on GitHub Pages
+## Variable Syntax (Conditions and Effects)
 
-1. Create a new repository on GitHub.
-2. Upload all files (`index.html`, `style.css`, `editor.js`, `player.js`, `story.yaml`, this README).
-3. Go to Settings → Pages → Select branch `main` and folder `/ (root)`.
-4. Your site will be live at `https://yourusername.github.io/yourrepo/`.
+Pocket Stories supports three variable groups:
+
+- `inventory` (bool/string/number values)
+- `relationships` (usually numeric scores)
+- `flags` (booleans)
+
+### Condition examples
+
+- `inventory.key == true`
+- `relationships.Alice >= 3`
+- `flags.opened_gate == false`
+
+### Effect examples
+
+- `inventory.key = true`
+- `relationships.Alice += 2`
+- `relationships.Guard -= 1`
+- `flags.met_dragon = true`
+
+## Demo Stories
+
+Open [`demo.html`](demo.html) for sample stories:
+
+- Forest Adventure (default)
+- Space Outpost
+- City Noir
+- River Oath (new short story focused on relationships + inventory)
+
+You can also open a specific story directly:
+
+- `index.html?story=stories/forest_adventure.yaml`
+- `index.html?story=stories/space_outpost.yaml`
+- `index.html?story=stories/city_noir.yaml`
+- `index.html?story=stories/river_oath.yaml`
+
+## Screenshots
+
+### Editor (Space Outpost demo)
+
+![Editor screenshot](browser:/tmp/codex_browser_invocations/1d3008f52288297d/artifacts/assets/screenshots/editor-space-outpost.png)
+
+### Demo stories page
+
+![Demo page screenshot](browser:/tmp/codex_browser_invocations/1d3008f52288297d/artifacts/assets/screenshots/demo-page.png)
+
+## Deploy to GitHub Pages
+
+1. Create a GitHub repo and upload project files.
+2. In **Settings → Pages**, publish from `main` and `/ (root)`.
+3. Your app will be live at `https://<username>.github.io/<repo>/`.
 
 ## Credits
 
-- [LiteGraph.js](https://github.com/jagenjo/litegraph.js) by Javi Agenjo (MIT License)
-- [js-yaml](https://github.com/nodeca/js-yaml) (MIT License)
-
-Enjoy creating interactive stories!
+- [js-yaml](https://github.com/nodeca/js-yaml) (MIT)
