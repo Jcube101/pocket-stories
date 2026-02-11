@@ -21,41 +21,61 @@
 
         <div id="editor-mode" class="mode">
             <div id="sidebar">
-                <h2>Global Variables</h2>
-                <div id="variables"></div>
-                <div id="add-variable-form" style="margin-top: 20px; padding-top: 16px; border-top: 2px solid rgba(255,255,255,0.15); padding-right: 16px;">
-                    <div style="display: flex; gap: 8px; align-items: center;">
-                        <select id="new-var-type">
-                            <option value="inventory">Inventory</option>
-                            <option value="relationships">Relationships</option>
-                            <option value="flags">Flags</option>
-                        </select>
-                        <input type="text" id="new-var-name" placeholder="Variable name" style="flex: 1; padding: 6px 10px;">
-                        <button id="add-var-btn">+ Add</button>
+                <section class="sidebar-section">
+                    <h2>Stories</h2>
+                    <select id="sample-story-select">
+                        <option value="stories/forest_adventure.yaml">Forest Adventure (default)</option>
+                        <option value="stories/space_outpost.yaml">Space Outpost</option>
+                        <option value="stories/city_noir.yaml">City Noir</option>
+                        <option value="stories/river_oath.yaml">River Oath</option>
+                    </select>
+                    <button id="load-sample-story">Load Selected Story</button>
+                    <label class="file-upload-label">
+                        Import story.yaml
+                        <input type="file" id="load-story" accept=".yaml,.yml,.json">
+                    </label>
+                    <div id="story-status" class="story-status" aria-live="polite"></div>
+                </section>
+
+                <section class="sidebar-section">
+                    <h2>Global Variables</h2>
+                    <div id="variables"></div>
+                    <div id="add-variable-form">
+                        <div class="row-inline">
+                            <select id="new-var-type">
+                                <option value="inventory">Inventory</option>
+                                <option value="relationships">Relationships</option>
+                                <option value="flags">Flags</option>
+                            </select>
+                            <input type="text" id="new-var-name" placeholder="Variable name">
+                            <button id="add-var-btn">+ Add</button>
+                        </div>
                     </div>
-                </div>
+                </section>
 
-                <h2>Passages</h2>
-                <input type="text" id="passage-search" placeholder="Search passage id/text..." style="width:100%; box-sizing:border-box; margin-bottom:8px;">
-                <div id="passage-list" class="passage-list"></div>
+                <section class="sidebar-section">
+                    <h2>Passages</h2>
+                    <input type="text" id="passage-search" placeholder="Search passage id/text...">
+                    <div id="passage-list" class="passage-list"></div>
+                </section>
 
-                <h2>Tools</h2>
-                <button id="branching-script">View as Branching Script</button>
-                <button id="export-yaml">Export story.yaml</button>
-                <button id="validate-story">Validate Story</button>
-                <button id="play-story">Play Story</button>
+                <section class="sidebar-section">
+                    <h2>Tools</h2>
+                    <button id="branching-script">View as Branching Script</button>
+                    <button id="export-yaml">Export story.yaml</button>
+                    <button id="validate-story">Validate Story</button>
+                    <button id="play-story">Play Story</button>
+                </section>
 
-                <h2>Import Story</h2>
-                <label class="file-upload-label">
-                    Load story.yaml
-                    <input type="file" id="load-story" accept=".yaml,.yml">
-                </label>
-
-                <h2>Canvas Controls</h2>
-                <button id="zoom-in">+</button>
-                <button id="zoom-out">−</button>
-                <button id="zoom-fit">Fit ~6 Nodes</button>
-                <button id="zoom-reset">100%</button>
+                <section class="sidebar-section">
+                    <h2>Canvas Controls</h2>
+                    <div class="row-inline">
+                        <button id="zoom-in">+</button>
+                        <button id="zoom-out">−</button>
+                        <button id="zoom-fit">Fit</button>
+                        <button id="zoom-reset">100%</button>
+                    </div>
+                </section>
             </div>
             <div id="graph-container">
                 <div id="canvas-wrapper">
@@ -66,13 +86,12 @@
         </div>
 
         <div id="player-mode" class="mode hidden">
-            <!-- unchanged player mode -->
             <div id="top-bar">
                 <button id="restart">Restart</button>
                 <button id="save-progress">Download Progress</button>
                 <label>
                     Upload Progress
-                    <input type="file" id="load-progress" accept=".txt">
+                    <input type="file" id="load-progress" accept=".txt,.json">
                 </label>
                 <button id="export-novel">Export as Novel</button>
                 <button id="back-editor">Back to Editor</button>
@@ -84,13 +103,6 @@
         </div>
     </div>
 
-    <div id="modal" class="modal hidden">
-        <div class="modal-content">
-            <span class="close">&times;</span>
-            <pre id="modal-body"></pre>
-        </div>
-    </div>
-
     <script src="editor.js"></script>
     <script src="player.js"></script>
     <script>
@@ -98,6 +110,26 @@
         const playerMode = document.getElementById('player-mode');
         const editorBtn = document.getElementById('editor-btn');
         const playerBtn = document.getElementById('player-btn');
+        const storyStatusEl = document.getElementById('story-status');
+
+        const DEFAULT_STORY_PATH = 'stories/forest_adventure.yaml';
+        const FALLBACK_STORY = {
+            variables: { inventory: {}, relationships: {}, flags: {} },
+            passages: {
+                start: {
+                    text: 'Welcome to Pocket Stories.\\n\\nUse the sidebar to load a sample story or import a YAML file.',
+                    choices: []
+                }
+            }
+        };
+
+        function setStoryStatus(message, type = 'info') {
+            if (!storyStatusEl) return;
+            storyStatusEl.textContent = message;
+            storyStatusEl.className = `story-status ${type}`;
+        }
+
+        window.setStoryStatus = setStoryStatus;
 
         editorBtn.addEventListener('click', () => {
             editorMode.classList.remove('hidden');
@@ -118,19 +150,63 @@
 
         document.getElementById('back-editor').addEventListener('click', () => editorBtn.click());
 
-        const storyFile = new URLSearchParams(window.location.search).get('story') || 'story.yaml';
+        function normalizeStoryData(data) {
+            if (!data || typeof data !== 'object') throw new Error('Invalid story format');
+            if (!data.passages || typeof data.passages !== 'object') throw new Error('Story is missing passages');
+            if (!data.variables || typeof data.variables !== 'object') {
+                data.variables = { inventory: {}, relationships: {}, flags: {} };
+            }
+            data.variables.inventory = data.variables.inventory || {};
+            data.variables.relationships = data.variables.relationships || {};
+            data.variables.flags = data.variables.flags || {};
+            return data;
+        }
 
-        fetch(storyFile)
-            .then(r => r.text())
-            .then(text => {
-                window.storyData = jsyaml.load(text);
-                initEditor();
-                initPlayer();
-            })
-            .catch(err => {
+        function loadStoryData(data, sourceLabel = 'story') {
+            window.storyData = normalizeStoryData(data);
+            initEditor();
+            initPlayer();
+            setStoryStatus(`Loaded: ${sourceLabel}`, 'success');
+        }
+
+        async function loadStoryFromPath(path, sourceLabel = path) {
+            const response = await fetch(path);
+            if (!response.ok) throw new Error(`HTTP ${response.status} loading ${path}`);
+            const text = await response.text();
+            const data = path.endsWith('.json') ? JSON.parse(text) : jsyaml.load(text);
+            loadStoryData(data, sourceLabel);
+        }
+
+        async function bootstrapStory() {
+            const params = new URLSearchParams(window.location.search);
+            const requested = params.get('story') || DEFAULT_STORY_PATH;
+
+            try {
+                await loadStoryFromPath(requested, requested);
+            } catch (firstErr) {
+                console.error(firstErr);
+                try {
+                    await loadStoryFromPath(DEFAULT_STORY_PATH, DEFAULT_STORY_PATH);
+                    setStoryStatus(`Couldn't load ${requested}. Loaded default story instead.`, 'warning');
+                } catch (fallbackErr) {
+                    console.error(fallbackErr);
+                    loadStoryData(FALLBACK_STORY, 'Built-in fallback story');
+                    setStoryStatus('Could not fetch local files. Loaded built-in fallback story. Use Import Story or Load Selected Story.', 'warning');
+                }
+            }
+        }
+
+        window.loadStoryByPath = async (path, label = path) => {
+            try {
+                await loadStoryFromPath(path, label);
+            } catch (err) {
                 console.error(err);
-                alert("Could not load story.yaml");
-            });
+                setStoryStatus(`Failed to load ${label}`, 'error');
+                alert(`Could not load ${label}`);
+            }
+        };
+
+        bootstrapStory();
     </script>
 </body>
 </html>

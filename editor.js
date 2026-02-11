@@ -13,11 +13,21 @@ let historyIndex = -1;
 const MAX_HISTORY = 20;
 let highlightedCycleNodes = new Set();
 let highlightedCycleEdges = new Set();
+let highlightedUnreachableNodes = new Set();
+let editorEventsBound = false;
+
+function normalizeVariables(v = {}) {
+    return {
+        inventory: v.inventory || {},
+        relationships: v.relationships || {},
+        flags: v.flags || {}
+    };
+}
 
 function cloneEditorState() {
     return {
         passages: JSON.parse(JSON.stringify(window.storyData.passages || {})),
-        variables: JSON.parse(JSON.stringify(window.storyData.variables || { inventory: {}, relationships: {}, flags: {} }))
+        variables: JSON.parse(JSON.stringify(normalizeVariables(window.storyData.variables)))
     };
 }
 
@@ -86,12 +96,6 @@ function initEditor() {
     window.storyData.variables = JSON.parse(JSON.stringify(variables));
     renderVariables();
     renderPassageList();
-
-    const searchInput = document.getElementById('passage-search');
-    if (searchInput) {
-        searchInput.value = '';
-        searchInput.oninput = () => applyPassageSearch(searchInput.value);
-    }
 
     const searchInput = document.getElementById('passage-search');
     if (searchInput) {
@@ -211,44 +215,7 @@ function bindEditorEvents() {
         }
     });
 
-    // Prevent context menu on middle-click release
-    wrapper.addEventListener('contextmenu', e => {
-        if (e.button === 1) e.preventDefault();
-    });
-
-    // Double-click empty canvas to create a new passage
-    wrapper.addEventListener('dblclick', e => {
-        if (e.target.closest('.node')) return;
-
-        const newIdRaw = prompt('New passage ID', `passage_${Date.now()}`);
-        if (newIdRaw === null) return;
-        const newId = newIdRaw.trim();
-        if (!newId) {
-            alert('Passage ID cannot be empty.');
-            return;
-        }
-        if (window.storyData.passages[newId]) {
-            alert(`Passage "${newId}" already exists.`);
-            return;
-        }
-
-        const newText = prompt('Passage text', 'Write your passage text here...');
-        if (newText === null) return;
-
-        const x = Math.max(0, (e.clientX - pan.x) / scale - 160);
-        const y = Math.max(0, (e.clientY - pan.y) / scale - 100);
-
-        window.storyData.passages[newId] = {
-            text: `${newText}\n`,
-            choices: [],
-            position: { x, y }
-        };
-
-        createNode(newId, newText, Object.keys(window.storyData.passages).length);
-        drawConnections();
-        expandCanvasIfNeeded();
-        saveState();
-    });
+    editorEventsBound = true;
 }
 
 function updateTransform() {
@@ -492,7 +459,7 @@ function drawConnections() {
                 path.classList.add('cycle-edge');
             }
 
-            // Right-click delete
+            // Right-click action menu for connection
             path.addEventListener('contextmenu', e => {
                 e.preventDefault();
                 const action = prompt('Connection action: type "edit" to edit, "delete" to remove.', 'edit');
@@ -539,8 +506,13 @@ function drawConnections() {
     });
 
     document.querySelectorAll('.node').forEach(node => {
-        node.classList.toggle('cycle-node', highlightedCycleNodes.has(node.dataset.id));
+        const nodeId = node.dataset.id;
+        node.classList.toggle('cycle-node', highlightedCycleNodes.has(nodeId));
+        node.classList.toggle('unreachable-node', highlightedUnreachableNodes.has(nodeId));
     });
+
+    const searchInput = document.getElementById('passage-search');
+    if (searchInput) applyPassageSearch(searchInput.value || '');
 }
 
 function fitToNodes() {
@@ -1023,9 +995,10 @@ function applyStateIncremental(state) {
     });
 
     window.storyData.passages = targetPassages;
-    window.storyData.variables = JSON.parse(JSON.stringify(state.variables || { inventory: {}, relationships: {}, flags: {} }));
+    window.storyData.variables = JSON.parse(JSON.stringify(normalizeVariables(state.variables)));
     variables = JSON.parse(JSON.stringify(window.storyData.variables));
     renderVariables();
+    renderPassageList();
 
     if (selectedNode && !window.storyData.passages[selectedNode.dataset.id]) {
         selectedNode = null;
@@ -1036,27 +1009,38 @@ function applyStateIncremental(state) {
 }
 
 // Import handler — rebuild with new node creation
-document.getElementById('load-story').addEventListener('change', e => {
-    const file = e.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = ev => {
-        try {
-            const yamlText = ev.target.result;
-            const newData = jsyaml.load(yamlText);
-            if (!newData.passages) throw "Invalid story";
-            window.storyData = newData;
-            variables = JSON.parse(JSON.stringify(normalizeVariables(newData.variables)));
-            newData.variables = JSON.parse(JSON.stringify(variables));
-            initEditor(); // Rebuild everything
-            alert("Story loaded successfully!");
-        } catch (err) {
-            console.error(err);
-            alert("Failed to load story.yaml");
-        }
-    };
-    reader.readAsText(file);
-});
+const loadStoryInput = document.getElementById('load-story');
+if (loadStoryInput) {
+    loadStoryInput.addEventListener('change', e => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = ev => {
+            try {
+                const raw = ev.target.result;
+                const isJson = file.name.toLowerCase().endsWith('.json');
+                const parsed = isJson ? JSON.parse(raw) : jsyaml.load(raw);
+                if (!parsed || !parsed.passages) throw new Error('Invalid story file: missing passages');
+                window.storyData = parsed;
+                variables = JSON.parse(JSON.stringify(normalizeVariables(parsed.variables)));
+                window.storyData.variables = JSON.parse(JSON.stringify(variables));
+                initEditor();
+                if (typeof initPlayer === 'function') initPlayer();
+                if (typeof window.setStoryStatus === 'function') {
+                    window.setStoryStatus(`Imported: ${file.name}`, 'success');
+                }
+                alert(`Story imported: ${file.name}`);
+            } catch (err) {
+                console.error(err);
+                if (typeof window.setStoryStatus === 'function') {
+                    window.setStoryStatus(`Import failed: ${file.name}`, 'error');
+                }
+                alert(`Failed to import story file: ${file.name}`);
+            }
+        };
+        reader.readAsText(file);
+    });
+}
 
 // Keyboard shortcuts
 document.addEventListener('keydown', e => {
@@ -1127,6 +1111,18 @@ const sidebar = document.getElementById('sidebar');
 const graphContainer = document.getElementById('graph-container');
 const toggleBtn = document.getElementById('toggle-sidebar');
 const btnHelp = document.getElementById('help-btn');
+const sampleStorySelect = document.getElementById('sample-story-select');
+const loadSampleStoryBtn = document.getElementById('load-sample-story');
+if (sampleStorySelect && loadSampleStoryBtn) {
+    loadSampleStoryBtn.onclick = async () => {
+        const value = sampleStorySelect.value;
+        if (!value) return;
+        if (typeof window.loadStoryByPath === 'function') {
+            await window.loadStoryByPath(value, sampleStorySelect.options[sampleStorySelect.selectedIndex].textContent);
+        }
+    };
+}
+
 // Add variable handler (runs once)
 const addVarBtn = document.getElementById('add-var-btn');
 const varTypeSelect = document.getElementById('new-var-type');
