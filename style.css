@@ -421,3 +421,40 @@ h1 {
     border-radius: 6px;
     border: 1px solid #666;
 }
+
+.passage-list {
+    max-height: 160px;
+    overflow: auto;
+    border: 1px solid rgba(0,0,0,0.12);
+    border-radius: 8px;
+    padding: 6px;
+    margin-bottom: 12px;
+}
+
+.passage-item {
+    width: 100%;
+    text-align: left;
+    margin: 2px 0;
+    padding: 6px 8px;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    background: transparent;
+    cursor: pointer;
+}
+
+.passage-item:hover {
+    background: rgba(59, 130, 246, 0.12);
+}
+
+.node.unreachable-node {
+    border-color: #ef4444 !important;
+    box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.45), 0 4px 12px rgba(0,0,0,0.15);
+}
+
+.node.search-match {
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.35), 0 4px 12px rgba(0,0,0,0.15);
+}
+
+.node.search-dim {
+    opacity: 0.35;
+}

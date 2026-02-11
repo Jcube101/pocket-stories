@@ -10,12 +10,14 @@ function initPlayer() {
     renderPassage();
 }
 
-function startPlayer() {
+function startPlayer(startPassage = "start") {
     variablesState = JSON.parse(JSON.stringify(window.storyData.variables));
-    currentPassage = "start";
+    currentPassage = window.storyData.passages[startPassage] ? startPassage : "start";
     history = [];
     renderPassage();
 }
+
+window.startPlayer = startPlayer;
 
 function renderPassage() {
     const p = window.storyData.passages[currentPassage];
@@ -86,7 +88,7 @@ function setNested(obj, path, value) {
     target[last] = value;
 }
 
-document.getElementById('restart').onclick = startPlayer;
+document.getElementById('restart').onclick = () => startPlayer('start');
 
 document.getElementById('save-progress').onclick = () => {
     const state = { currentPassage, variablesState, history };

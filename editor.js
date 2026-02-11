@@ -95,6 +95,13 @@ function initEditor() {
     // Variables sidebar
     variables = JSON.parse(JSON.stringify(window.storyData.variables));
     renderVariables();
+    renderPassageList();
+
+    const searchInput = document.getElementById('passage-search');
+    if (searchInput) {
+        searchInput.value = '';
+        searchInput.oninput = () => applyPassageSearch(searchInput.value);
+    }
 
     // Canvas interactions
     nodesContainer.addEventListener('mousedown', e => {
@@ -309,6 +316,7 @@ function createNode(id, text, index) {
             window.storyData.passages[newId] = JSON.parse(JSON.stringify(window.storyData.passages[id]));
             delete window.storyData.passages[id];
             nodeDiv.dataset.id = newId;
+            renderPassageList();
             drawConnections();
             saveState();
         }
@@ -333,6 +341,16 @@ function createNode(id, text, index) {
         if (selectedNode) selectedNode.classList.remove('selected');
         selectedNode = nodeDiv;
         nodeDiv.classList.add('selected');
+    });
+
+    nodeDiv.addEventListener('contextmenu', e => {
+        if (e.target.classList.contains('node-output') || e.target.isContentEditable) return;
+        e.preventDefault();
+        const nodeId = nodeDiv.dataset.id;
+        if (confirm(`Test from here? Start Player Mode at "${nodeId}".`)) {
+            window.__playerStartPassage = nodeId;
+            document.getElementById('player-btn').click();
+        }
     });
 
     nodesContainer.appendChild(nodeDiv);
@@ -497,6 +515,56 @@ function fitToNodes() {
     pan.x = (canvasW - width * scale) / 2 + 150;
     pan.y = (canvasH - height * scale) / 2;
     updateTransform();
+}
+
+function renderPassageList() {
+    const list = document.getElementById('passage-list');
+    if (!list) return;
+    list.innerHTML = '';
+
+    const ids = Object.keys(window.storyData.passages || {}).sort();
+    ids.forEach(id => {
+        const item = document.createElement('button');
+        item.type = 'button';
+        item.className = 'passage-item';
+        item.textContent = id;
+        item.onclick = () => {
+            const node = document.querySelector(`.node[data-id="${id}"]`);
+            if (!node) return;
+            if (selectedNode) selectedNode.classList.remove('selected');
+            selectedNode = node;
+            node.classList.add('selected');
+            const x = parseFloat(node.style.left);
+            const y = parseFloat(node.style.top);
+            pan.x = Math.max(0, window.innerWidth / 2 - x * scale - 180);
+            pan.y = Math.max(0, window.innerHeight / 2 - y * scale - 120);
+            updateTransform();
+        };
+        list.appendChild(item);
+    });
+}
+
+function applyPassageSearch(rawTerm) {
+    const term = (rawTerm || '').trim().toLowerCase();
+    const ids = Object.keys(window.storyData.passages || {});
+
+    ids.forEach(id => {
+        const node = document.querySelector(`.node[data-id="${id}"]`);
+        if (!node) return;
+
+        const text = (window.storyData.passages[id].text || '').toLowerCase();
+        const match = !term || id.toLowerCase().includes(term) || text.includes(term);
+        node.classList.toggle('search-match', !!term && match);
+        node.classList.toggle('search-dim', !!term && !match);
+    });
+
+    const listItems = document.querySelectorAll('#passage-list .passage-item');
+    listItems.forEach(btn => {
+        const id = btn.textContent || '';
+        const text = (window.storyData.passages[id]?.text || '').toLowerCase();
+        const match = !term || id.toLowerCase().includes(term) || text.includes(term);
+        btn.classList.toggle('hidden', !!term && !match);
+    });
 }
 
 function renderVariables() {
@@ -719,9 +787,11 @@ function validateStory() {
             });
         }
     }
+    const unreachable = new Set();
     for (const id of ids) {
         if (id !== 'start' && !reachable.has(id)) {
             issues.push(`Unreachable passage: "${id}"`);
+            unreachable.add(id);
         }
     }
 
@@ -744,6 +814,7 @@ function validateStory() {
     });
     highlightedCycleNodes = cycleNodes;
     highlightedCycleEdges = cycleEdges;
+    highlightedUnreachableNodes = unreachable;
     drawConnections();
 
     // Report
@@ -965,6 +1036,7 @@ document.addEventListener('keydown', e => {
             });
             selectedNode.remove();
             selectedNode = null;
+            renderPassageList();
             drawConnections();
             saveState(); // ← add here
         }
