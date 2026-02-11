@@ -8,37 +8,56 @@ let isPanning = false;
 let panStart = { x: 0, y: 0 };
 let connectingFrom = null;
 let selectedNode = null;
-let selectedConnection = null; // not used yet, but preparing for future
 let undoStack = [];
-let redoStack = [];
+let historyIndex = -1;
 const MAX_HISTORY = 20;
+let highlightedCycleNodes = new Set();
+let highlightedCycleEdges = new Set();
+let highlightedUnreachableNodes = new Set();
+let editorEventsBound = false;
 
-function saveState() {
-    // Deep copy essential data
-    const state = {
-        passages: JSON.parse(JSON.stringify(window.storyData.passages)),
-        // If you later add node positions to storyData, include them here
+function normalizeVariables(v = {}) {
+    return {
+        inventory: v.inventory || {},
+        relationships: v.relationships || {},
+        flags: v.flags || {}
     };
+}
+
+function cloneEditorState() {
+    return {
+        passages: JSON.parse(JSON.stringify(window.storyData.passages || {})),
+        variables: JSON.parse(JSON.stringify(normalizeVariables(window.storyData.variables)))
+    };
+}
+
+function saveState(options = {}) {
+    if (options.resetHistory) {
+        undoStack = [];
+        historyIndex = -1;
+    }
+
+    const state = cloneEditorState();
+
+    if (historyIndex < undoStack.length - 1) {
+        undoStack = undoStack.slice(0, historyIndex + 1);
+    }
+
     undoStack.push(state);
     if (undoStack.length > MAX_HISTORY) {
         undoStack.shift();
+    } else {
+        historyIndex += 1;
     }
-    redoStack = []; // clear redo when new action occurs
+
+    if (undoStack.length === MAX_HISTORY && historyIndex >= MAX_HISTORY) {
+        historyIndex = MAX_HISTORY - 1;
+    }
 }
 
 function initEditor() {
     nodesContainer = document.getElementById('nodes-container');
     svgCanvas = document.getElementById('svg-canvas');
-
-    // Deselect on canvas click
-    nodesContainer.addEventListener('click', e => {
-        if (e.target === nodesContainer || e.target === svgCanvas) {
-            if (selectedNode) {
-                selectedNode.classList.remove('selected');
-                selectedNode = null;
-            }
-        }
-    });
 
     // Clear previous content
     nodesContainer.innerHTML = '';
@@ -67,12 +86,89 @@ function initEditor() {
     // Draw connections
     drawConnections();
     expandCanvasIfNeeded();  // ensure initial size is sufficient
+    fitToNodes();
+
+    // Initialize undo/redo baseline for current story
+    saveState({ resetHistory: true });
 
     // Variables sidebar
-    variables = JSON.parse(JSON.stringify(window.storyData.variables));
+    variables = JSON.parse(JSON.stringify(normalizeVariables(window.storyData.variables)));
+    window.storyData.variables = JSON.parse(JSON.stringify(variables));
     renderVariables();
+    renderPassageList();
 
-    // Canvas interactions
+    const searchInput = document.getElementById('passage-search');
+    if (searchInput) {
+        searchInput.value = '';
+        searchInput.oninput = () => applyPassageSearch(searchInput.value);
+    }
+
+    bindEditorEvents();
+
+    // Wheel zoom (screen-centered, no drift)
+    nodesContainer.onwheel = e => {
+        e.preventDefault();
+        const factor = e.deltaY < 0 ? 1.1 : 0.9;
+        scale = Math.max(0.3, Math.min(scale * factor, 2));
+        updateTransform();
+    };
+
+    // Zoom buttons
+    document.getElementById('zoom-in').onclick = () => { scale = Math.min(scale * 1.2, 2); updateTransform(); };
+    document.getElementById('zoom-out').onclick = () => { scale = Math.max(scale / 1.2, 0.3); updateTransform(); };
+    document.getElementById('zoom-reset').onclick = () => { scale = 1; pan = { x: 0, y: 0 }; updateTransform(); };
+    document.getElementById('zoom-fit').onclick = fitToNodes;
+
+    const wrapper = document.getElementById('canvas-wrapper');
+    wrapper.ondblclick = e => {
+        if (e.target.closest('.node')) return;
+
+        const newIdRaw = prompt('New passage ID', `passage_${Date.now()}`);
+        if (newIdRaw === null) return;
+        const newId = newIdRaw.trim();
+        if (!newId) {
+            alert('Passage ID cannot be empty.');
+            return;
+        }
+        if (window.storyData.passages[newId]) {
+            alert(`Passage "${newId}" already exists.`);
+            return;
+        }
+
+        const newText = prompt('Passage text', 'Write your passage text here...');
+        if (newText === null) return;
+
+        const x = Math.max(0, (e.clientX - pan.x) / scale - 160);
+        const y = Math.max(0, (e.clientY - pan.y) / scale - 100);
+
+        window.storyData.passages[newId] = {
+            text: `${newText}\n`,
+            choices: [],
+            position: { x, y }
+        };
+
+        createNode(newId, newText, Object.keys(window.storyData.passages).length);
+        renderPassageList();
+        drawConnections();
+        expandCanvasIfNeeded();
+        saveState();
+    };
+}
+
+function bindEditorEvents() {
+    if (editorEventsBound) return;
+
+    const wrapper = document.getElementById('canvas-wrapper');
+
+    nodesContainer.addEventListener('click', e => {
+        if (e.target === nodesContainer || e.target === svgCanvas) {
+            if (selectedNode) {
+                selectedNode.classList.remove('selected');
+                selectedNode = null;
+            }
+        }
+    });
+
     nodesContainer.addEventListener('mousedown', e => {
         if (e.target === nodesContainer || e.target === svgCanvas) {
             isPanning = true;
@@ -81,26 +177,6 @@ function initEditor() {
         }
     });
 
-    // Wheel zoom (screen-centered, no drift)
-    nodesContainer.addEventListener('wheel', e => {
-        e.preventDefault();
-        const factor = e.deltaY < 0 ? 1.1 : 0.9;
-        scale = Math.max(0.3, Math.min(scale * factor, 2));
-        updateTransform();
-    }, { passive: false });
-
-    // Zoom buttons
-    document.getElementById('zoom-in').onclick = () => { scale = Math.min(scale * 1.2, 2); updateTransform(); };
-    document.getElementById('zoom-out').onclick = () => { scale = Math.max(scale / 1.2, 0.3); updateTransform(); };
-    document.getElementById('zoom-reset').onclick = () => { scale = 1; pan = { x: 0, y: 0 }; updateTransform(); };
-    document.getElementById('zoom-fit').onclick = fitToNodes;
-
-    // Middle-click panning on the wrapper
-    const wrapper = document.getElementById('canvas-wrapper');
-    let isPanning = false;
-    let panStart = { x: 0, y: 0 };
-
-    // Deselect on background
     wrapper.addEventListener('click', e => {
         if (e.target === wrapper || e.target === svgCanvas) {
             if (selectedNode) {
@@ -112,7 +188,7 @@ function initEditor() {
     });
 
     wrapper.addEventListener('mousedown', e => {
-        if (e.button === 1) {  // middle mouse button
+        if (e.button === 1) {
             isPanning = true;
             panStart.x = e.clientX - pan.x;
             panStart.y = e.clientY - pan.y;
@@ -121,12 +197,15 @@ function initEditor() {
         }
     });
 
+    wrapper.addEventListener('contextmenu', e => {
+        if (e.button === 1) e.preventDefault();
+    });
+
     document.addEventListener('mousemove', e => {
-        if (isPanning) {
-            pan.x = e.clientX - panStart.x;
-            pan.y = e.clientY - panStart.y;
-            updateTransform();
-        }
+        if (!isPanning) return;
+        pan.x = e.clientX - panStart.x;
+        pan.y = e.clientY - panStart.y;
+        updateTransform();
     });
 
     document.addEventListener('mouseup', e => {
@@ -136,10 +215,7 @@ function initEditor() {
         }
     });
 
-    // Prevent context menu on middle-click release
-    wrapper.addEventListener('contextmenu', e => {
-        if (e.button === 1) e.preventDefault();
-    });
+    editorEventsBound = true;
 }
 
 function updateTransform() {
@@ -251,6 +327,7 @@ function createNode(id, text, index) {
             window.storyData.passages[newId] = JSON.parse(JSON.stringify(window.storyData.passages[id]));
             delete window.storyData.passages[id];
             nodeDiv.dataset.id = newId;
+            renderPassageList();
             drawConnections();
             saveState();
         }
@@ -277,6 +354,16 @@ function createNode(id, text, index) {
         nodeDiv.classList.add('selected');
     });
 
+    nodeDiv.addEventListener('contextmenu', e => {
+        if (e.target.classList.contains('node-output') || e.target.isContentEditable) return;
+        e.preventDefault();
+        const nodeId = nodeDiv.dataset.id;
+        if (confirm(`Test from here? Start Player Mode at "${nodeId}".`)) {
+            window.__playerStartPassage = nodeId;
+            document.getElementById('player-btn').click();
+        }
+    });
+
     nodesContainer.appendChild(nodeDiv);
 }
 
@@ -291,7 +378,7 @@ document.addEventListener('mouseup', e => {
                 if (!window.storyData.passages[fromId].choices) window.storyData.passages[fromId].choices = [];
                 window.storyData.passages[fromId].choices.push({ text, target: toId });
                 drawConnections();
-                saveState(); // ← add here
+                saveState();
             }
         }
     }
@@ -367,14 +454,36 @@ function drawConnections() {
                 path.classList.add('selected');
             });
 
-            // Right-click delete
+            const edgeKey = `${id}->${ch.target}`;
+            if (highlightedCycleEdges.has(edgeKey)) {
+                path.classList.add('cycle-edge');
+            }
+
+            // Right-click action menu for connection
             path.addEventListener('contextmenu', e => {
                 e.preventDefault();
-                if (confirm(`Delete connection "${ch.text || 'Continue'}" from ${id} to ${ch.target}?`)) {
-                    window.storyData.passages[id].choices.splice(choiceIndex, 1);
-                    drawConnections();
-                    saveState();
+                const action = prompt('Connection action: type "edit" to edit, "delete" to remove.', 'edit');
+                if (!action) return;
+
+                if (action.toLowerCase() === 'delete') {
+                    if (confirm(`Delete connection "${ch.text || 'Continue'}" from ${id} to ${ch.target}?`)) {
+                        window.storyData.passages[id].choices.splice(choiceIndex, 1);
+                        drawConnections();
+                        saveState();
+                    }
+                    return;
                 }
+
+                if (action.toLowerCase() !== 'edit') return;
+
+                const newText = prompt('Choice text', ch.text || '');
+                if (newText !== null) ch.text = newText || undefined;
+                const cond = prompt('Condition (optional)', ch.condition || '');
+                if (cond !== null) ch.condition = cond || undefined;
+                const eff = prompt('Effect (optional)', ch.effect || '');
+                if (eff !== null) ch.effect = eff || undefined;
+                drawConnections();
+                saveState();
             });
 
             // Label
@@ -393,19 +502,17 @@ function drawConnections() {
             text.appendChild(textPath);
             svgCanvas.appendChild(text);
 
-            // Right-click edit (kept separate from delete for safety)
-            path.addEventListener('contextmenu', e => {
-                e.preventDefault();
-                const newText = prompt("Choice text", ch.text || "");
-                if (newText !== null) ch.text = newText || undefined;
-                const cond = prompt("Condition (optional)", ch.condition || "");
-                if (cond !== null) ch.condition = cond || undefined;
-                const eff = prompt("Effect (optional)", ch.effect || "");
-                if (eff !== null) ch.effect = eff || undefined;
-                drawConnections();
-            });
         });
     });
+
+    document.querySelectorAll('.node').forEach(node => {
+        const nodeId = node.dataset.id;
+        node.classList.toggle('cycle-node', highlightedCycleNodes.has(nodeId));
+        node.classList.toggle('unreachable-node', highlightedUnreachableNodes.has(nodeId));
+    });
+
+    const searchInput = document.getElementById('passage-search');
+    if (searchInput) applyPassageSearch(searchInput.value || '');
 }
 
 function fitToNodes() {
@@ -430,6 +537,56 @@ function fitToNodes() {
     pan.x = (canvasW - width * scale) / 2 + 150;
     pan.y = (canvasH - height * scale) / 2;
     updateTransform();
+}
+
+function renderPassageList() {
+    const list = document.getElementById('passage-list');
+    if (!list) return;
+    list.innerHTML = '';
+
+    const ids = Object.keys(window.storyData.passages || {}).sort();
+    ids.forEach(id => {
+        const item = document.createElement('button');
+        item.type = 'button';
+        item.className = 'passage-item';
+        item.textContent = id;
+        item.onclick = () => {
+            const node = document.querySelector(`.node[data-id="${id}"]`);
+            if (!node) return;
+            if (selectedNode) selectedNode.classList.remove('selected');
+            selectedNode = node;
+            node.classList.add('selected');
+            const x = parseFloat(node.style.left);
+            const y = parseFloat(node.style.top);
+            pan.x = Math.max(0, window.innerWidth / 2 - x * scale - 180);
+            pan.y = Math.max(0, window.innerHeight / 2 - y * scale - 120);
+            updateTransform();
+        };
+        list.appendChild(item);
+    });
+}
+
+function applyPassageSearch(rawTerm) {
+    const term = (rawTerm || '').trim().toLowerCase();
+    const ids = Object.keys(window.storyData.passages || {});
+
+    ids.forEach(id => {
+        const node = document.querySelector(`.node[data-id="${id}"]`);
+        if (!node) return;
+
+        const text = (window.storyData.passages[id].text || '').toLowerCase();
+        const match = !term || id.toLowerCase().includes(term) || text.includes(term);
+        node.classList.toggle('search-match', !!term && match);
+        node.classList.toggle('search-dim', !!term && !match);
+    });
+
+    const listItems = document.querySelectorAll('#passage-list .passage-item');
+    listItems.forEach(btn => {
+        const id = btn.textContent || '';
+        const text = (window.storyData.passages[id]?.text || '').toLowerCase();
+        const match = !term || id.toLowerCase().includes(term) || text.includes(term);
+        btn.classList.toggle('hidden', !!term && !match);
+    });
 }
 
 function renderVariables() {
@@ -652,11 +809,35 @@ function validateStory() {
             });
         }
     }
+    const unreachable = new Set();
     for (const id of ids) {
         if (id !== 'start' && !reachable.has(id)) {
             issues.push(`Unreachable passage: "${id}"`);
+            unreachable.add(id);
         }
     }
+
+    const cycles = findCycles(passages);
+    if (cycles.length > 0) {
+        cycles.forEach((cycle, idx) => {
+            issues.push(`Cycle ${idx + 1}: ${cycle.join(' → ')} → ${cycle[0]}`);
+        });
+    }
+
+    const cycleNodes = new Set();
+    const cycleEdges = new Set();
+    cycles.forEach(cycle => {
+        for (let i = 0; i < cycle.length; i += 1) {
+            const from = cycle[i];
+            const to = cycle[(i + 1) % cycle.length];
+            cycleNodes.add(from);
+            cycleEdges.add(`${from}->${to}`);
+        }
+    });
+    highlightedCycleNodes = cycleNodes;
+    highlightedCycleEdges = cycleEdges;
+    highlightedUnreachableNodes = unreachable;
+    drawConnections();
 
     // Report
     if (issues.length === 0) {
@@ -674,6 +855,63 @@ function validateStory() {
         html += `</ul>`;
         showModal(html);
     }
+}
+
+function findCycles(passages) {
+    const ids = Object.keys(passages);
+    const visited = new Set();
+    const onStack = new Set();
+    const stack = [];
+    const cycleSignatures = new Set();
+    const cycles = [];
+
+    function normalizeCycle(cycleIds) {
+        let best = null;
+        for (let i = 0; i < cycleIds.length; i += 1) {
+            const rotated = cycleIds.slice(i).concat(cycleIds.slice(0, i));
+            const signature = rotated.join('->');
+            if (best === null || signature < best) best = signature;
+        }
+        return best;
+    }
+
+    function dfs(id) {
+        visited.add(id);
+        onStack.add(id);
+        stack.push(id);
+
+        const choices = passages[id]?.choices || [];
+        choices.forEach(ch => {
+            const target = ch.target;
+            if (!passages[target]) return;
+
+            if (!visited.has(target)) {
+                dfs(target);
+                return;
+            }
+
+            if (onStack.has(target)) {
+                const idx = stack.indexOf(target);
+                if (idx >= 0) {
+                    const cycle = stack.slice(idx);
+                    const signature = normalizeCycle(cycle);
+                    if (!cycleSignatures.has(signature)) {
+                        cycleSignatures.add(signature);
+                        cycles.push(cycle);
+                    }
+                }
+            }
+        });
+
+        stack.pop();
+        onStack.delete(id);
+    }
+
+    ids.forEach(id => {
+        if (!visited.has(id)) dfs(id);
+    });
+
+    return cycles;
 }
 
 function expandCanvasIfNeeded() {
@@ -702,35 +940,72 @@ function expandCanvasIfNeeded() {
 }
 
 function undo() {
-    if (undoStack.length === 0) return;
-
-    // Save current state to redo stack
-    redoStack.push({
-        passages: JSON.parse(JSON.stringify(window.storyData.passages))
-    });
-
-    // Restore previous state
-    const previous = undoStack.pop();
-    window.storyData.passages = previous.passages;
-
-    // Rebuild UI
-    initEditor(); // this will recreate all nodes & connections
+    if (historyIndex <= 0) return;
+    historyIndex -= 1;
+    applyStateIncremental(undoStack[historyIndex]);
 }
 
 function redo() {
-    if (redoStack.length === 0) return;
+    if (historyIndex >= undoStack.length - 1) return;
+    historyIndex += 1;
+    applyStateIncremental(undoStack[historyIndex]);
+}
 
-    // Save current state to undo stack
-    undoStack.push({
-        passages: JSON.parse(JSON.stringify(window.storyData.passages))
+function applyStateIncremental(state) {
+    if (!state) return;
+
+    const targetPassages = JSON.parse(JSON.stringify(state.passages || {}));
+    const existingNodes = new Map(Array.from(document.querySelectorAll('.node')).map(node => [node.dataset.id, node]));
+
+    // Remove nodes no longer present
+    existingNodes.forEach((node, id) => {
+        if (!targetPassages[id]) {
+            node.remove();
+        }
     });
 
-    // Restore next state
-    const next = redoStack.pop();
-    window.storyData.passages = next.passages;
+    // Add missing nodes
+    Object.keys(targetPassages).forEach((id, index) => {
+        if (!existingNodes.has(id)) {
+            createNode(id, (targetPassages[id].text || '').trim(), index);
+        }
+    });
 
-    // Rebuild UI
-    initEditor();
+    // Update existing node content/position
+    Object.keys(targetPassages).forEach(id => {
+        const node = document.querySelector(`.node[data-id="${id}"]`);
+        if (!node) return;
+        const p = targetPassages[id];
+
+        const title = node.querySelector('.node-title');
+        if (title && title.textContent.trim() !== id) {
+            title.textContent = id;
+        }
+
+        const text = node.querySelector('.node-text');
+        const trimmed = (p.text || '').trim();
+        if (text && text.textContent !== trimmed) {
+            text.textContent = trimmed;
+        }
+
+        if (p.position) {
+            node.style.left = `${p.position.x}px`;
+            node.style.top = `${p.position.y}px`;
+        }
+    });
+
+    window.storyData.passages = targetPassages;
+    window.storyData.variables = JSON.parse(JSON.stringify(normalizeVariables(state.variables)));
+    variables = JSON.parse(JSON.stringify(window.storyData.variables));
+    renderVariables();
+    renderPassageList();
+
+    if (selectedNode && !window.storyData.passages[selectedNode.dataset.id]) {
+        selectedNode = null;
+    }
+
+    drawConnections();
+    expandCanvasIfNeeded();
 }
 
 // Import handler — rebuild with new node creation
@@ -744,7 +1019,8 @@ document.getElementById('load-story').addEventListener('change', e => {
             const newData = jsyaml.load(yamlText);
             if (!newData.passages) throw "Invalid story";
             window.storyData = newData;
-            variables = JSON.parse(JSON.stringify(newData.variables || { inventory: {}, relationships: {}, flags: {} }));
+            variables = JSON.parse(JSON.stringify(normalizeVariables(newData.variables)));
+            newData.variables = JSON.parse(JSON.stringify(variables));
             initEditor(); // Rebuild everything
             alert("Story loaded successfully!");
         } catch (err) {
@@ -760,7 +1036,21 @@ document.addEventListener('keydown', e => {
     // Delete selected node
     if ((e.key === 'Delete' || e.key === 'Backspace') && selectedNode) {
         const id = selectedNode.dataset.id;
-        if (confirm(`Delete passage "${id}" and all connections to/from it?`)) {
+        const incoming = Object.keys(window.storyData.passages).filter(pid =>
+            (window.storyData.passages[pid].choices || []).some(ch => ch.target === id)
+        );
+        const outgoing = (window.storyData.passages[id]?.choices || []).map(ch => ch.target);
+
+        const warnings = [];
+        if (id === 'start') {
+            warnings.push('You are deleting the START passage. The story may become unplayable.');
+        }
+        if (incoming.length > 0 || outgoing.length > 0) {
+            warnings.push(`This node has ${incoming.length} incoming and ${outgoing.length} outgoing connection(s).`);
+        }
+
+        const message = `${warnings.length ? `⚠ ${warnings.join('\n')}` : ''}\n\nDelete passage "${id}" and all connections to/from it?`;
+        if (confirm(message.trim())) {
             delete window.storyData.passages[id];
             // Remove incoming connections
             Object.keys(window.storyData.passages).forEach(pid => {
@@ -770,8 +1060,9 @@ document.addEventListener('keydown', e => {
             });
             selectedNode.remove();
             selectedNode = null;
+            renderPassageList();
             drawConnections();
-            saveState(); // ← add here
+            saveState();
         }
     }
 
@@ -805,7 +1096,6 @@ const btnValidate = document.getElementById('validate-story');
 const btnExport = document.getElementById('export-yaml');
 const btnBranching = document.getElementById('branching-script');
 const btnPlay = document.getElementById('play-story');
-const btnAddVar = document.getElementById('add-var');
 const sidebar = document.getElementById('sidebar');
 const graphContainer = document.getElementById('graph-container');
 const toggleBtn = document.getElementById('toggle-sidebar');
