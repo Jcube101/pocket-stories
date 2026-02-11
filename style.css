@@ -238,6 +238,17 @@ h1 {
     }
 }
 
+
+.cycle-node {
+    border-color: #f59e0b !important;
+    box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.5), 0 4px 12px rgba(0,0,0,0.15);
+}
+
+.connection-path.cycle-edge {
+    stroke: #f59e0b !important;
+    stroke-width: 5;
+}
+
 #svg-canvas text {
     fill: #e2e8f0;  /* light gray, readable on dark */
     font-weight: 500;
