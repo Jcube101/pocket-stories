@@ -14,7 +14,6 @@ let historyIndex = -1;
 const MAX_HISTORY = 20;
 let highlightedCycleNodes = new Set();
 let highlightedCycleEdges = new Set();
-let highlightedUnreachableNodes = new Set();
 
 function cloneEditorState() {
     return {
@@ -202,7 +201,6 @@ function initEditor() {
         };
 
         createNode(newId, newText, Object.keys(window.storyData.passages).length);
-        renderPassageList();
         drawConnections();
         expandCanvasIfNeeded();
         saveState();
@@ -491,13 +489,8 @@ function drawConnections() {
     });
 
     document.querySelectorAll('.node').forEach(node => {
-        const nodeId = node.dataset.id;
-        node.classList.toggle('cycle-node', highlightedCycleNodes.has(nodeId));
-        node.classList.toggle('unreachable-node', highlightedUnreachableNodes.has(nodeId));
+        node.classList.toggle('cycle-node', highlightedCycleNodes.has(node.dataset.id));
     });
-
-    const searchInput = document.getElementById('passage-search');
-    if (searchInput) applyPassageSearch(searchInput.value || '');
 }
 
 function fitToNodes() {
@@ -983,13 +976,6 @@ function applyStateIncremental(state) {
     window.storyData.variables = JSON.parse(JSON.stringify(state.variables || { inventory: {}, relationships: {}, flags: {} }));
     variables = JSON.parse(JSON.stringify(window.storyData.variables));
     renderVariables();
-    renderPassageList();
-
-    const searchInput = document.getElementById('passage-search');
-    if (searchInput) {
-        searchInput.value = '';
-        searchInput.oninput = () => applyPassageSearch(searchInput.value);
-    }
 
     if (selectedNode && !window.storyData.passages[selectedNode.dataset.id]) {
         selectedNode = null;
