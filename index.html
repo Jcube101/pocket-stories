@@ -151,7 +151,7 @@
 
         document.getElementById('back-editor').addEventListener('click', () => editorBtn.click());
 
-        function loadStoryData(data, sourceLabel = 'story') {
+        function loadStoryData(data, sourceLabel = 'story', sourceMeta = {}) {
             const validator = window.validateAndNormalizeStory;
             const result = typeof validator === 'function'
                 ? validator(data)
@@ -163,8 +163,30 @@
                 alert(`Story load failed for ${sourceLabel}.\n\n${details}`);
                 throw new Error(`Story validation failed: ${result.errors.join(' | ')}`);
             }
-
             window.storyData = result.data;
+
+            if (!window.storyData.metadata || typeof window.storyData.metadata !== 'object') {
+                window.storyData.metadata = {};
+            }
+
+            const hasPath = typeof sourceMeta.path === 'string' && sourceMeta.path.length > 0;
+            const hasImportHash = typeof sourceMeta.importHash === 'string' && sourceMeta.importHash.length > 0;
+            let storyIdentity = null;
+
+            if (hasPath) {
+                storyIdentity = `path:${sourceMeta.path}`;
+                window.storyData.metadata.loadPath = sourceMeta.path;
+            }
+
+            if (hasImportHash) {
+                storyIdentity = `import:${sourceMeta.importHash}`;
+                window.storyData.metadata.importHash = sourceMeta.importHash;
+            }
+
+            if (storyIdentity) {
+                window.storyData.metadata.storyIdentity = storyIdentity;
+            }
+
             initEditor();
             initPlayer();
 
@@ -184,7 +206,7 @@
             if (!response.ok) throw new Error(`HTTP ${response.status} loading ${path}`);
             const text = await response.text();
             const data = path.endsWith('.json') ? JSON.parse(text) : jsyaml.load(text);
-            loadStoryData(data, sourceLabel);
+            loadStoryData(data, sourceLabel, { path });
         }
 
         async function bootstrapStory() {
