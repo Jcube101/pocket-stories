@@ -29,6 +29,11 @@ let hoveredNodeId = null;
 let downstreamHighlight = { nodes: new Set(), edges: new Set() };
 let highlightFullDownstream = false;
 
+const EDGE_DETAIL_LEVELS = {
+    HIDE_LABELS: 0.75,
+    SHOW_LABELS: 0.95
+};
+
 const NODE_VARIANTS = {
     start: { label: 'Start', icon: '🚩', className: 'variant-start' },
     dialogue: { label: 'Dialogue', icon: '💬', className: 'variant-dialogue' },
@@ -625,8 +630,11 @@ function initEditor() {
     // Clear previous content
     nodesContainer.innerHTML = '';
     svgCanvas.innerHTML = `<defs>
-        <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
-            <path d="M0,0 L0,6 L9,3 z" fill="#666" />
+        <marker id="arrow" markerWidth="11" markerHeight="11" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+            <path d="M0,0 L0,6 L10,3 z" fill="#64748b" />
+        </marker>
+        <marker id="arrow-active" markerWidth="12" markerHeight="12" refX="10" refY="3" orient="auto" markerUnits="strokeWidth">
+            <path d="M0,0 L0,6 L11,3 z" fill="#0ea5e9" />
         </marker>
     </defs>`;
 
@@ -884,6 +892,60 @@ function bindEditorEvents() {
 function updateTransform() {
     nodesContainer.style.transform = `translate(${pan.x}px, ${pan.y}px) scale(${scale})`;
     svgCanvas.style.transform = `translate(${pan.x}px, ${pan.y}px) scale(${scale})`;
+    updateEdgeDetailVisibility();
+}
+
+function getEdgeLabelDetailLevel() {
+    if (scale < EDGE_DETAIL_LEVELS.HIDE_LABELS) return 'hidden';
+    if (scale < EDGE_DETAIL_LEVELS.SHOW_LABELS) return 'compact';
+    return 'full';
+}
+
+function truncateEdgeLabel(label, maxLen = 34) {
+    const compact = String(label || '').replace(/\s+/g, ' ').trim();
+    if (compact.length <= maxLen) return compact;
+    return `${compact.slice(0, Math.max(0, maxLen - 1)).trim()}…`;
+}
+
+function updateEdgeDetailVisibility() {
+    if (!svgCanvas) return;
+    const detailLevel = getEdgeLabelDetailLevel();
+    svgCanvas.classList.toggle('zoom-labels-hidden', detailLevel === 'hidden');
+    svgCanvas.classList.toggle('zoom-labels-compact', detailLevel === 'compact');
+}
+
+function getNodeCenter(node) {
+    return {
+        x: parseFloat(node.style.left) + node.offsetWidth / 2,
+        y: parseFloat(node.style.top) + node.offsetHeight / 2
+    };
+}
+
+function getBundleLayout(edges, nodeElements, layerById) {
+    const groups = new Map();
+    edges.forEach(edge => {
+        const fromLayer = layerById.get(edge.from) ?? 0;
+        const toLayer = layerById.get(edge.to) ?? 0;
+        const dir = toLayer >= fromLayer ? 'fwd' : 'rev';
+        const key = `${dir}:${Math.min(fromLayer, toLayer)}-${Math.max(fromLayer, toLayer)}`;
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(edge);
+    });
+
+    const layoutById = new Map();
+    groups.forEach(group => {
+        group.sort((a, b) => {
+            const ac = (getNodeCenter(nodeElements.get(a.from)).y + getNodeCenter(nodeElements.get(a.to)).y) / 2;
+            const bc = (getNodeCenter(nodeElements.get(b.from)).y + getNodeCenter(nodeElements.get(b.to)).y) / 2;
+            return ac - bc || a.id.localeCompare(b.id);
+        });
+        const mid = (group.length - 1) / 2;
+        group.forEach((edge, index) => {
+            layoutById.set(edge.id, { bundleOffset: (index - mid) * 16, bundleSize: group.length });
+        });
+    });
+
+    return layoutById;
 }
 
 function createNode(id, text, index) {
@@ -1009,25 +1071,37 @@ document.addEventListener('mouseup', e => {
     connectingFrom = null;
 });
 
-function buildEdgePath(edge, fromNode, toNode) {
-    const fromX = parseFloat(fromNode.style.left) + fromNode.offsetWidth;
+function buildEdgePath(edge, fromNode, toNode, layerById, bundleLayout) {
+    const fromLeft = parseFloat(fromNode.style.left);
+    const fromRight = fromLeft + fromNode.offsetWidth;
     const fromY = parseFloat(fromNode.style.top) + fromNode.offsetHeight / 2;
-    const toX = parseFloat(toNode.style.left);
+    const toLeft = parseFloat(toNode.style.left);
+    const toRight = toLeft + toNode.offsetWidth;
     const toY = parseFloat(toNode.style.top) + toNode.offsetHeight / 2;
 
-    const deltaY = toY - fromY;
-    const horizontal = Math.max(120, Math.abs(toX - fromX) / 3);
-    let offset = Math.abs(deltaY) < 100 ? 80 : Math.sign(deltaY) * 150;
+    const fromLayer = layerById.get(edge.from) ?? 0;
+    const toLayer = layerById.get(edge.to) ?? 0;
+    const forward = toLayer >= fromLayer;
+    const lane = bundleLayout.get(edge.id)?.bundleOffset || 0;
 
-    if (edge.type === EDGE_TYPES.JUMP || edge.type === EDGE_TYPES.RETURN) {
-        offset = Math.sign(deltaY || 1) * 220;
+    const startX = forward ? fromRight : fromLeft;
+    const endX = forward ? toLeft : toRight;
+    const direction = forward ? 1 : -1;
+
+    const exitX = startX + direction * 28;
+    let corridorX;
+    if (forward) {
+        corridorX = ((fromRight + toLeft) / 2) + lane;
+    } else {
+        corridorX = Math.max(fromRight, toRight) + 120 + lane;
     }
 
-    const cp1x = fromX + horizontal;
-    const cp1y = fromY + offset;
-    const cp2x = toX - horizontal;
-    const cp2y = toY - offset;
-    return `M ${fromX} ${fromY} C ${cp1x} ${cp1y} ${cp2x} ${cp2y} ${toX} ${toY}`;
+    if (edge.type === EDGE_TYPES.JUMP || edge.type === EDGE_TYPES.RETURN) {
+        corridorX += direction * 40;
+    }
+
+    const entryX = endX - direction * 28;
+    return `M ${startX} ${fromY} L ${exitX} ${fromY} L ${corridorX} ${fromY} L ${corridorX} ${toY} L ${entryX} ${toY} L ${endX} ${toY}`;
 }
 
 function applyEdgeValidationClasses(path, edgeKey, connId) {
@@ -1046,13 +1120,20 @@ function applyEdgeValidationClasses(path, edgeKey, connId) {
 
 function drawConnections() {
     svgCanvas.innerHTML = `<defs>
-        <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
-            <path d="M0,0 L0,6 L9,3 z" fill="#666" />
+        <marker id="arrow" markerWidth="11" markerHeight="11" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+            <path d="M0,0 L0,6 L10,3 z" fill="#64748b" />
+        </marker>
+        <marker id="arrow-active" markerWidth="12" markerHeight="12" refX="10" refY="3" orient="auto" markerUnits="strokeWidth">
+            <path d="M0,0 L0,6 L11,3 z" fill="#0ea5e9" />
         </marker>
     </defs>`;
 
     const passages = window.storyData.passages || {};
     const { visibleNodes, renderedEdges, criticalNodes } = getRenderedGraphState(passages);
+    const { layerById } = getPrimaryGraphLayers(passages);
+    const nodeElements = new Map();
+    document.querySelectorAll('.node').forEach(node => nodeElements.set(node.dataset.id, node));
+    const bundleLayout = getBundleLayout(renderedEdges, nodeElements, layerById);
     const orderedEdges = [
         ...renderedEdges.filter(edge => !edge.isPrimary),
         ...renderedEdges.filter(edge => edge.isPrimary)
@@ -1061,11 +1142,11 @@ function drawConnections() {
     orderedEdges.forEach(edge => {
         if (!showSecondaryEdges && !edge.isPrimary) return;
 
-        const fromNode = document.querySelector(`.node[data-id="${edge.from}"]`);
-        const toNode = document.querySelector(`.node[data-id="${edge.to}"]`);
+        const fromNode = nodeElements.get(edge.from);
+        const toNode = nodeElements.get(edge.to);
         if (!fromNode || !toNode) return;
 
-        const pathD = buildEdgePath(edge, fromNode, toNode);
+        const pathD = buildEdgePath(edge, fromNode, toNode, layerById, bundleLayout);
         const edgeKey = `${edge.from}->${edge.to}`;
 
         const defPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
@@ -1082,12 +1163,15 @@ function drawConnections() {
         if (criticalNodes && (!criticalNodes.has(edge.from) || !criticalNodes.has(edge.to))) {
             path.classList.add('edge-dimmed');
         }
-        path.setAttribute('marker-end', 'url(#arrow)');
+        path.setAttribute('marker-end', (edge.from === hoveredNodeId || edge.to === hoveredNodeId || downstreamHighlight.edges.has(edgeKey)) ? 'url(#arrow-active)' : 'url(#arrow)');
         path.dataset.from = edge.from;
         path.dataset.to = edge.to;
         path.dataset.index = edge.choiceIndex;
         if (downstreamHighlight.edges.has(edgeKey)) {
             path.classList.add('edge-downstream-highlight');
+        }
+        if (edge.from === hoveredNodeId || edge.to === hoveredNodeId) {
+            path.classList.add('edge-active');
         }
         applyEdgeValidationClasses(path, edgeKey, edge.id);
 
@@ -1141,10 +1225,15 @@ function drawConnections() {
 
         svgCanvas.appendChild(path);
 
-        let labelText = edge.choice.text || 'Continue';
-        if (edge.rerouted) labelText = `↷ ${labelText}`;
-        if (edge.choice.condition) labelText += ` [if ${edge.choice.condition}]`;
-        if (edge.choice.effect) labelText += ` [${edge.choice.effect}]`;
+        const fullLabelParts = [];
+        if (edge.choice.text) fullLabelParts.push(edge.choice.text);
+        if (edge.choice.condition) fullLabelParts.push(`if ${edge.choice.condition}`);
+        if (edge.choice.effect) fullLabelParts.push(edge.choice.effect);
+        let fullLabelText = fullLabelParts.join(' · ') || 'Continue';
+        if (edge.rerouted) fullLabelText = `↷ ${fullLabelText}`;
+
+        const isChoiceLike = edge.type === EDGE_TYPES.CHOICE || Boolean(edge.choice.condition);
+        const shortLabel = truncateEdgeLabel(fullLabelText, 28);
 
         const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
         text.classList.add('connection-label', `edge-${edge.type}`);
@@ -1156,12 +1245,21 @@ function drawConnections() {
         textPath.setAttribute('href', `#textpath-${edge.id}`);
         textPath.setAttribute('startOffset', '50%');
         textPath.setAttribute('text-anchor', 'middle');
-        textPath.textContent = labelText;
+        textPath.textContent = isChoiceLike ? shortLabel : truncateEdgeLabel(fullLabelText, 34);
         textPath.style.fontSize = '13px';
         textPath.style.fill = '#e2e8f0';
         text.appendChild(textPath);
+
+        if (isChoiceLike) {
+            text.classList.add('label-choice');
+            const title = document.createElementNS('http://www.w3.org/2000/svg', 'title');
+            title.textContent = fullLabelText;
+            text.appendChild(title);
+        }
         svgCanvas.appendChild(text);
     });
+
+    updateEdgeDetailVisibility();
 
     document.querySelectorAll('.node').forEach(node => {
         const nodeId = node.dataset.id;
