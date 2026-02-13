@@ -207,6 +207,39 @@ h1 {
   font-weight: 600;
 }
 
+
+.node-hidden {
+    display: none !important;
+}
+
+.node-dimmed {
+    opacity: 0.35;
+}
+
+.connection-path.edge-dimmed,
+.connection-label.edge-dimmed {
+    opacity: 0.22;
+}
+
+.connection-path.edge-rerouted {
+    stroke-dasharray: 4 10;
+}
+
+.collapsed-tag {
+    display: inline-block;
+    margin-left: 8px;
+    padding: 2px 6px;
+    font-size: 0.68rem;
+    border-radius: 12px;
+    background: rgba(15, 23, 42, 0.18);
+    font-weight: 700;
+}
+
+.node-collapsed .node-preview {
+    max-height: 2.8em;
+    overflow: hidden;
+}
+
 .connection-path {
     pointer-events: auto;  /* ← crucial: enables click/right-click */
     cursor: pointer;
@@ -866,6 +899,12 @@ h1 {
     margin: 0 !important;
     width: 100% !important;
     min-height: 38px;
+}
+
+.control-hint {
+    grid-column: 1 / -1;
+    font-size: 12px;
+    opacity: 0.75;
 }
 
 .zoom-indicator {
