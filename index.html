@@ -103,6 +103,7 @@
         </div>
     </div>
 
+    <script src="story-validation.js"></script>
     <script src="editor.js"></script>
     <script src="player.js"></script>
     <script>
@@ -150,24 +151,33 @@
 
         document.getElementById('back-editor').addEventListener('click', () => editorBtn.click());
 
-        function normalizeStoryData(data) {
-            if (!data || typeof data !== 'object') throw new Error('Invalid story format');
-            if (!data.passages || typeof data.passages !== 'object') throw new Error('Story is missing passages');
-            if (!data.variables || typeof data.variables !== 'object') {
-                data.variables = { inventory: {}, relationships: {}, flags: {} };
-            }
-            data.variables.inventory = data.variables.inventory || {};
-            data.variables.relationships = data.variables.relationships || {};
-            data.variables.flags = data.variables.flags || {};
-            return data;
-        }
-
         function loadStoryData(data, sourceLabel = 'story') {
-            window.storyData = normalizeStoryData(data);
+            const validator = window.validateAndNormalizeStory;
+            const result = typeof validator === 'function'
+                ? validator(data)
+                : { ok: true, data, warnings: [], errors: [] };
+
+            if (!result.ok) {
+                const details = result.errors.map((msg, idx) => `${idx + 1}. ${msg}`).join('\n');
+                setStoryStatus(`Failed to load ${sourceLabel}`, 'error');
+                alert(`Story load failed for ${sourceLabel}.\n\n${details}`);
+                throw new Error(`Story validation failed: ${result.errors.join(' | ')}`);
+            }
+
+            window.storyData = result.data;
             initEditor();
             initPlayer();
-            setStoryStatus(`Loaded: ${sourceLabel}`, 'success');
+
+            if (result.warnings.length > 0) {
+                const details = result.warnings.map((msg, idx) => `${idx + 1}. ${msg}`).join('\n');
+                setStoryStatus(`Loaded with ${result.warnings.length} warning(s): ${sourceLabel}`, 'warning');
+                alert(`Loaded ${sourceLabel} with warnings:\n\n${details}`);
+            } else {
+                setStoryStatus(`Loaded: ${sourceLabel}`, 'success');
+            }
         }
+
+        window.loadStoryData = loadStoryData;
 
         async function loadStoryFromPath(path, sourceLabel = path) {
             const response = await fetch(path);
