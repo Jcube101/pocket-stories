@@ -22,6 +22,22 @@ let highlightedInfoNodes = new Set();
 let highlightedInfoEdges = new Set();
 let editorEventsBound = false;
 let showSecondaryEdges = true;
+let inspectorEls = null;
+
+const NODE_VARIANTS = {
+    start: { label: 'Start', icon: '🚩', className: 'variant-start' },
+    dialogue: { label: 'Dialogue', icon: '💬', className: 'variant-dialogue' },
+    choice: { label: 'Choice', icon: '🔀', className: 'variant-choice' },
+    condition: { label: 'Condition', icon: '🧪', className: 'variant-condition' },
+    merge: { label: 'Merge', icon: '🧷', className: 'variant-merge' },
+    ending: { label: 'Ending', icon: '🏁', className: 'variant-ending' }
+};
+
+const RISK_TOKENS = {
+    deadEnd: { label: 'Dead End', className: 'risk-dead-end' },
+    unresolvedReference: { label: 'Unresolved Ref', className: 'risk-unresolved' },
+    unreachable: { label: 'Unreachable', className: 'risk-unreachable' }
+};
 
 const EDGE_TYPES = {
     PROGRESSION: 'progression',
@@ -215,6 +231,131 @@ function collectEdges(passages) {
     return { edges, layerById };
 }
 
+function getIncomingCounts(passages) {
+    const counts = {};
+    Object.keys(passages || {}).forEach(id => { counts[id] = 0; });
+    Object.values(passages || {}).forEach(passage => {
+        (passage.choices || []).forEach(choice => {
+            if (Object.prototype.hasOwnProperty.call(counts, choice.target)) {
+                counts[choice.target] += 1;
+            }
+        });
+    });
+    return counts;
+}
+
+function inferNodeVariant(id, passage, incomingCount = 0) {
+    if (id === 'start') return 'start';
+    const choices = passage.choices || [];
+    if (choices.length === 0) return 'ending';
+    if (choices.some(choice => Boolean(choice.condition))) return 'condition';
+    if (choices.length > 1) return 'choice';
+    if (incomingCount > 1) return 'merge';
+    return 'dialogue';
+}
+
+function getNodeRisks(id, passage) {
+    const choices = passage.choices || [];
+    const unresolvedReference = choices.some(choice => !window.storyData.passages[choice.target]);
+    return {
+        deadEnd: id !== 'start' && choices.length === 0,
+        unresolvedReference,
+        unreachable: highlightedUnreachableNodes.has(id)
+    };
+}
+
+function escapeHtml(text) {
+    return String(text || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function renderInspectorMeta(nodeId, passage) {
+    if (!inspectorEls?.meta) return;
+    const choiceCount = (passage.choices || []).length;
+    const conditionalCount = (passage.choices || []).filter(choice => Boolean(choice.condition)).length;
+    const missingTargets = (passage.choices || []).filter(choice => !window.storyData.passages[choice.target]).map(choice => choice.target);
+    inspectorEls.meta.innerHTML = `
+        <div class="inspector-meta-row"><strong>Choices:</strong> ${choiceCount}</div>
+        <div class="inspector-meta-row"><strong>Conditional choices:</strong> ${conditionalCount}</div>
+        <div class="inspector-meta-row"><strong>Missing targets:</strong> ${missingTargets.length ? missingTargets.join(', ') : 'None'}</div>
+        <div class="inspector-meta-row"><strong>Unreachable:</strong> ${highlightedUnreachableNodes.has(nodeId) ? 'Yes' : 'No'}</div>
+    `;
+}
+
+function refreshNodeCard(nodeId) {
+    const node = document.querySelector(`.node[data-id="${nodeId}"]`);
+    const passage = window.storyData.passages[nodeId];
+    if (!node || !passage) return;
+
+    const incomingCounts = getIncomingCounts(window.storyData.passages || {});
+    const variantId = inferNodeVariant(nodeId, passage, incomingCounts[nodeId] || 0);
+    const variant = NODE_VARIANTS[variantId];
+    const risks = getNodeRisks(nodeId, passage);
+    const text = (passage.text || '').trim();
+    const riskBadges = Object.entries(risks)
+        .filter(([, active]) => active)
+        .map(([riskId]) => {
+            const risk = RISK_TOKENS[riskId];
+            return `<span class="node-badge risk ${risk.className}">${risk.label}</span>`;
+        })
+        .join('');
+
+    node.className = `node ${variant.className}`;
+    if (selectedNode === node) node.classList.add('selected');
+    node.innerHTML = `
+        <div class="node-header">
+            <span class="node-variant-icon">${variant.icon}</span>
+            <div class="node-header-text">
+                <div class="node-title">${escapeHtml(nodeId)}</div>
+                <div class="node-subtitle">${variant.label}</div>
+            </div>
+        </div>
+        <div class="node-preview">${escapeHtml(text)}</div>
+        <div class="node-meta-badges">
+            <span class="node-badge variant ${variant.className}">${variant.label}</span>
+            ${riskBadges}
+        </div>
+        <div class="node-output"></div>
+    `;
+
+    node.querySelector('.node-output').addEventListener('mousedown', e => {
+        e.stopPropagation();
+        connectingFrom = node;
+    });
+}
+
+function updateNodeInspector(nodeId = null) {
+    if (!inspectorEls) return;
+    if (!nodeId || !window.storyData.passages[nodeId]) {
+        inspectorEls.empty.classList.remove('hidden');
+        inspectorEls.content.classList.add('hidden');
+        return;
+    }
+
+    const passage = window.storyData.passages[nodeId];
+    const incomingCounts = getIncomingCounts(window.storyData.passages || {});
+    const variantId = inferNodeVariant(nodeId, passage, incomingCounts[nodeId] || 0);
+
+    inspectorEls.empty.classList.add('hidden');
+    inspectorEls.content.classList.remove('hidden');
+    inspectorEls.id.value = nodeId;
+    inspectorEls.id.dataset.originalId = nodeId;
+    inspectorEls.type.value = NODE_VARIANTS[variantId].label;
+    inspectorEls.text.value = (passage.text || '').trim();
+    renderInspectorMeta(nodeId, passage);
+}
+
+function selectNodeByElement(node) {
+    if (selectedNode) selectedNode.classList.remove('selected');
+    selectedNode = node;
+    if (selectedNode) selectedNode.classList.add('selected');
+    updateNodeInspector(selectedNode ? selectedNode.dataset.id : null);
+}
+
 function runLayeredAutoLayout(passages) {
     const { edges, layerById } = collectEdges(passages);
     const layers = new Map();
@@ -359,6 +500,62 @@ function initEditor() {
     renderVariables();
     renderPassageList();
 
+    inspectorEls = {
+        empty: document.querySelector('#node-inspector .inspector-empty'),
+        content: document.querySelector('#node-inspector .inspector-content'),
+        id: document.getElementById('inspector-node-id'),
+        type: document.getElementById('inspector-node-type'),
+        text: document.getElementById('inspector-node-text'),
+        meta: document.getElementById('inspector-node-meta')
+    };
+
+    if (inspectorEls.id) {
+        inspectorEls.id.onblur = () => {
+            const originalId = inspectorEls.id.dataset.originalId;
+            const nextId = inspectorEls.id.value.trim();
+            if (!originalId || !nextId || nextId === originalId) return;
+            if (window.storyData.passages[nextId]) {
+                alert(`Passage "${nextId}" already exists.`);
+                inspectorEls.id.value = originalId;
+                return;
+            }
+
+            window.storyData.passages[nextId] = JSON.parse(JSON.stringify(window.storyData.passages[originalId]));
+            delete window.storyData.passages[originalId];
+
+            Object.values(window.storyData.passages).forEach(p => {
+                (p.choices || []).forEach(choice => {
+                    if (choice.target === originalId) choice.target = nextId;
+                });
+            });
+
+            const node = document.querySelector(`.node[data-id="${originalId}"]`);
+            if (node) {
+                node.dataset.id = nextId;
+                refreshNodeCard(nextId);
+                selectedNode = node;
+            }
+
+            renderPassageList();
+            drawConnections();
+            updateNodeInspector(nextId);
+            saveState();
+        };
+    }
+
+    if (inspectorEls.text) {
+        inspectorEls.text.onblur = () => {
+            const activeId = inspectorEls.id?.dataset.originalId;
+            if (!activeId || !window.storyData.passages[activeId]) return;
+            window.storyData.passages[activeId].text = inspectorEls.text.value + '\n';
+            refreshNodeCard(activeId);
+            renderPassageList();
+            saveState();
+        };
+    }
+
+    updateNodeInspector(null);
+
     const searchInput = document.getElementById('passage-search');
     if (searchInput) {
         searchInput.value = '';
@@ -446,19 +643,13 @@ function bindEditorEvents() {
 
     nodesContainer.addEventListener('click', e => {
         if (e.target === nodesContainer || e.target === svgCanvas) {
-            if (selectedNode) {
-                selectedNode.classList.remove('selected');
-                selectedNode = null;
-            }
+            if (selectedNode) selectNodeByElement(null);
         }
     });
 
     wrapper.addEventListener('click', e => {
         if (e.target === wrapper || e.target === svgCanvas) {
-            if (selectedNode) {
-                selectedNode.classList.remove('selected');
-                selectedNode = null;
-            }
+            if (selectedNode) selectNodeByElement(null);
             document.querySelectorAll('.connection-path.selected').forEach(p => p.classList.remove('selected'));
         }
     });
@@ -504,7 +695,6 @@ function createNode(id, text, index) {
     nodeDiv.className = 'node';
     nodeDiv.dataset.id = id;
 
-    // Load position: YAML first, then localStorage fallback, then grid
     const passage = window.storyData.passages[id];
     let posX, posY;
 
@@ -512,14 +702,12 @@ function createNode(id, text, index) {
         posX = passage.position.x;
         posY = passage.position.y;
     } else {
-        // Fallback to localStorage
         const layout = getStoryLayout();
         const saved = layout[id];
         if (saved) {
             posX = saved.x;
             posY = saved.y;
         } else {
-            // Final fallback: grid
             posX = 150 + (index % 4) * 380;
             posY = 150 + Math.floor(index / 4) * 320;
         }
@@ -528,50 +716,35 @@ function createNode(id, text, index) {
     nodeDiv.style.left = `${posX}px`;
     nodeDiv.style.top = `${posY}px`;
 
-    nodeDiv.innerHTML = `
-        <div class="node-title" contenteditable="true">${id}</div>
-        ${id === 'start' ? '<div class="start-badge">START</div>' : ''}
-        <div class="node-text" contenteditable="true">${text}</div>
-        <div class="node-output"></div>
-    `;
-
-    // Drag node or start connection
     nodeDiv.addEventListener('mousedown', e => {
-        // Start connection from output port
         if (e.target.classList.contains('node-output')) {
             connectingFrom = nodeDiv;
             e.stopPropagation();
             return;
         }
 
-        // Allow editing contenteditable fields
-        if (e.target.isContentEditable) return;
-
-        // Otherwise: start dragging the node
         e.stopPropagation();
-
         const startX = e.clientX;
         const startY = e.clientY;
         const origX = parseFloat(nodeDiv.style.left);
         const origY = parseFloat(nodeDiv.style.top);
 
-        nodeDiv.style.zIndex = 100; // bring to front
+        nodeDiv.style.zIndex = 100;
 
         const onMouseMove = (moveEvent) => {
             const dx = moveEvent.clientX - startX;
             const dy = moveEvent.clientY - startY;
             nodeDiv.style.left = `${origX + dx}px`;
             nodeDiv.style.top = `${origY + dy}px`;
-            drawConnections(); // live update
+            drawConnections();
         };
 
         const onMouseUp = () => {
             document.removeEventListener('mousemove', onMouseMove);
             document.removeEventListener('mouseup', onMouseUp);
-            nodeDiv.style.zIndex = ''; // reset
+            nodeDiv.style.zIndex = '';
             expandCanvasIfNeeded();
 
-            // Sync to both YAML and localStorage
             const newX = parseFloat(nodeDiv.style.left);
             const newY = parseFloat(nodeDiv.style.top);
 
@@ -582,53 +755,22 @@ function createNode(id, text, index) {
             window.storyData.passages[id].position.y = newY;
             window.storyData.passages[id].position.manualOverride = true;
 
-            // Persist manual override so auto-layout never clobbers designer adjustments
             saveManualNodePosition(id, newX, newY);
-
             drawConnections();
-            saveState(); // for undo/redo
+            saveState();
         };
 
         document.addEventListener('mousemove', onMouseMove);
         document.addEventListener('mouseup', onMouseUp);
     });
 
-    // Save title change
-    nodeDiv.querySelector('.node-title').addEventListener('blur', e => {
-        const newId = e.target.textContent.trim();
-        if (newId && newId !== id) {
-            window.storyData.passages[newId] = JSON.parse(JSON.stringify(window.storyData.passages[id]));
-            delete window.storyData.passages[id];
-            nodeDiv.dataset.id = newId;
-            renderPassageList();
-            drawConnections();
-            saveState();
-        }
-    });
-
-    // Save text change
-    nodeDiv.querySelector('.node-text').addEventListener('blur', e => {
-        window.storyData.passages[id].text = e.target.textContent + "\n";
-        saveState();
-    });
-
-    // Start connection on output
-    nodeDiv.querySelector('.node-output').addEventListener('mousedown', e => {
-        e.stopPropagation();
-        connectingFrom = nodeDiv;
-    });
-
-    // Click to select node
     nodeDiv.addEventListener('click', e => {
-        if (e.target.isContentEditable) return;
         e.stopPropagation();
-        if (selectedNode) selectedNode.classList.remove('selected');
-        selectedNode = nodeDiv;
-        nodeDiv.classList.add('selected');
+        selectNodeByElement(nodeDiv);
     });
 
     nodeDiv.addEventListener('contextmenu', e => {
-        if (e.target.classList.contains('node-output') || e.target.isContentEditable) return;
+        if (e.target.classList.contains('node-output')) return;
         e.preventDefault();
         const nodeId = nodeDiv.dataset.id;
         if (confirm(`Test from here? Start Player Mode at "${nodeId}".`)) {
@@ -638,6 +780,7 @@ function createNode(id, text, index) {
     });
 
     nodesContainer.appendChild(nodeDiv);
+    refreshNodeCard(id);
 }
 
 document.addEventListener('mouseup', e => {
@@ -646,7 +789,7 @@ document.addEventListener('mouseup', e => {
         const toNode = e.target.closest('.node');
         const toId = toNode.dataset.id;
         if (fromId !== toId) {
-            const text = prompt("Choice text", "Continue");
+            const text = prompt('Choice text', 'Continue');
             if (text) {
                 if (!window.storyData.passages[fromId].choices) window.storyData.passages[fromId].choices = [];
                 window.storyData.passages[fromId].choices.push({ text, target: toId });
@@ -735,10 +878,7 @@ function drawConnections() {
 
         path.addEventListener('click', e => {
             e.stopPropagation();
-            if (selectedNode) {
-                selectedNode.classList.remove('selected');
-                selectedNode = null;
-            }
+            if (selectedNode) selectNodeByElement(null);
             document.querySelectorAll('.connection-path.selected').forEach(p => p.classList.remove('selected'));
             path.classList.add('selected');
         });
@@ -806,6 +946,7 @@ function drawConnections() {
 
     document.querySelectorAll('.node').forEach(node => {
         const nodeId = node.dataset.id;
+        refreshNodeCard(nodeId);
         node.classList.toggle('cycle-node', highlightedCycleNodes.has(nodeId));
         node.classList.toggle('unreachable-node', highlightedUnreachableNodes.has(nodeId));
         node.classList.toggle('validation-node-error', highlightedErrorNodes.has(nodeId));
@@ -845,9 +986,7 @@ function jumpToPassage(id) {
     const node = document.querySelector(`.node[data-id="${id}"]`);
     if (!node) return;
 
-    if (selectedNode) selectedNode.classList.remove('selected');
-    selectedNode = node;
-    node.classList.add('selected');
+    selectNodeByElement(node);
 
     const x = parseFloat(node.style.left);
     const y = parseFloat(node.style.top);
@@ -1585,21 +1724,11 @@ function applyStateIncremental(state) {
         if (!node) return;
         const p = targetPassages[id];
 
-        const title = node.querySelector('.node-title');
-        if (title && title.textContent.trim() !== id) {
-            title.textContent = id;
-        }
-
-        const text = node.querySelector('.node-text');
-        const trimmed = (p.text || '').trim();
-        if (text && text.textContent !== trimmed) {
-            text.textContent = trimmed;
-        }
-
         if (p.position) {
             node.style.left = `${p.position.x}px`;
             node.style.top = `${p.position.y}px`;
         }
+        refreshNodeCard(id);
     });
 
     window.storyData.passages = targetPassages;
@@ -1611,6 +1740,7 @@ function applyStateIncremental(state) {
     if (selectedNode && !window.storyData.passages[selectedNode.dataset.id]) {
         selectedNode = null;
     }
+    updateNodeInspector(selectedNode ? selectedNode.dataset.id : null);
 
     drawConnections();
     expandCanvasIfNeeded();
@@ -1702,6 +1832,7 @@ document.addEventListener('keydown', e => {
             });
             selectedNode.remove();
             selectedNode = null;
+            updateNodeInspector(null);
             renderPassageList();
             drawConnections();
             saveState();
@@ -1710,8 +1841,7 @@ document.addEventListener('keydown', e => {
 
     // Esc deselect
     if (e.key === 'Escape' && selectedNode) {
-        selectedNode.classList.remove('selected');
-        selectedNode = null;
+        selectNodeByElement(null);
     }
 
     // Ctrl+S export

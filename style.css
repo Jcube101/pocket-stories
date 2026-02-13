@@ -903,3 +903,102 @@ h1 {
         background: #fff;
     }
 }
+
+/* Node card variants + inspector */
+#graph-container {
+    display: flex;
+}
+
+#canvas-wrapper {
+    flex: 1;
+    min-width: 0;
+}
+
+#node-inspector {
+    width: 320px;
+    border-left: 1px solid #ddd;
+    background: #f7f7f7;
+    padding: 0.9rem;
+    overflow-y: auto;
+}
+
+#node-inspector h2 { margin-top: 0; font-size: 1.1rem; }
+#node-inspector label { display: block; font-size: 0.8rem; font-weight: 700; margin-top: 0.75rem; }
+#node-inspector input,
+#node-inspector textarea {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 0.45rem;
+    border: 1px solid #bbb;
+    border-radius: 8px;
+    font-family: inherit;
+}
+
+.node {
+    width: 300px;
+    min-height: 170px;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+}
+
+.node-header {
+    display: flex;
+    gap: 0.5rem;
+    align-items: flex-start;
+}
+
+.node-variant-icon { font-size: 1rem; }
+.node-title { font-weight: 700; }
+.node-subtitle { font-size: 0.8rem; opacity: 0.7; }
+
+.node-preview {
+    white-space: pre-wrap;
+    font-size: 0.92rem;
+    line-height: 1.35;
+    display: -webkit-box;
+    -webkit-line-clamp: 4;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    min-height: 4.8em;
+}
+
+.node.selected .node-preview {
+    -webkit-line-clamp: 6;
+}
+
+.node-meta-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    min-height: 1.4rem;
+}
+
+.node-badge {
+    border-radius: 999px;
+    padding: 0.1rem 0.55rem;
+    font-size: 0.72rem;
+    font-weight: 700;
+}
+
+.variant-start { border-color: #14b8a6; }
+.variant-dialogue { border-color: #3b82f6; }
+.variant-choice { border-color: #8b5cf6; }
+.variant-condition { border-color: #eab308; }
+.variant-merge { border-color: #6366f1; }
+.variant-ending { border-color: #10b981; }
+
+.risk-dead-end { background: #fee2e2; color: #991b1b; }
+.risk-unresolved { background: #fef3c7; color: #92400e; }
+.risk-unreachable { background: #dbeafe; color: #1e3a8a; }
+
+.inspector-meta-row { margin-top: 0.35rem; font-size: 0.85rem; }
+
+@media (prefers-color-scheme: dark) {
+    #node-inspector { background: #1d1d1d; border-left-color: #444; }
+    #node-inspector input,
+    #node-inspector textarea { background: #2c2c2c; color: #eee; border-color: #555; }
+    .risk-dead-end { background: #4b1d1d; color: #fecaca; }
+    .risk-unresolved { background: #4a3412; color: #fde68a; }
+    .risk-unreachable { background: #1e3a5f; color: #bfdbfe; }
+}
