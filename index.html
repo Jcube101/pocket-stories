@@ -87,6 +87,19 @@
                     <div id="nodes-container"></div>
                     <svg id="svg-canvas"></svg>
                 </div>
+                <aside id="node-inspector" aria-live="polite">
+                    <h2>Node Inspector</h2>
+                    <p class="inspector-empty">Select a node to inspect full details.</p>
+                    <div class="inspector-content hidden">
+                        <label for="inspector-node-id">Passage ID</label>
+                        <input id="inspector-node-id" type="text">
+                        <label for="inspector-node-type">Node Type</label>
+                        <input id="inspector-node-type" type="text" readonly>
+                        <label for="inspector-node-text">Full Text</label>
+                        <textarea id="inspector-node-text" rows="10"></textarea>
+                        <div id="inspector-node-meta"></div>
+                    </div>
+                </aside>
             </div>
         </div>
 
