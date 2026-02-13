@@ -274,6 +274,20 @@ h1 {
     opacity: 0.6;
 }
 
+
+.connection-path.edge-style-logic {
+    stroke-width: 3.1;
+}
+
+.connection-path.edge-style-playtest {
+    stroke-width: 3.4;
+    stroke-linecap: round;
+}
+
+.connection-label.edge-mode-playtest {
+    opacity: 0.45;
+}
+
 @media (prefers-color-scheme: dark) {
     .connection-path { stroke: #aaa; }
     .connection-path.selected { stroke: #4dabf7; }
@@ -904,6 +918,16 @@ h1 {
     align-items: center;
     gap: 6px;
     font-size: 13px;
+}
+
+
+.view-mode-control {
+    justify-content: space-between;
+}
+
+.view-mode-control select {
+    flex: 1;
+    min-height: 30px;
 }
 
 .canvas-controls-grid button {
