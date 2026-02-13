@@ -720,3 +720,161 @@ h1 {
 
     .story-status { color: #cbd5e1; }
 }
+
+/* --- 2026 UI refresh overrides --- */
+#sidebar {
+    width: 360px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    scrollbar-gutter: stable both-edges;
+}
+
+#canvas-wrapper {
+    overflow: auto;
+    scrollbar-gutter: stable both-edges;
+    cursor: default;
+}
+
+#sidebar,
+#canvas-wrapper,
+.passage-list,
+#variables {
+    scrollbar-width: thin;
+}
+
+#variables {
+    display: grid;
+    gap: 14px;
+}
+
+.variable-group {
+    border: 1px solid rgba(148, 163, 184, 0.22);
+    border-radius: 10px;
+    padding: 10px;
+    background: rgba(15, 23, 42, 0.28);
+}
+
+.variable-group h3 {
+    margin: 0 0 10px 0;
+    font-size: 1.1rem;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.25);
+    padding-bottom: 8px;
+}
+
+.variable-empty {
+    margin: 0;
+    font-size: 0.9rem;
+    opacity: 0.8;
+}
+
+.variable-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 96px auto;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+    padding: 0;
+}
+
+.variable-label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 600;
+}
+
+.variable-input {
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    margin: 0;
+    padding: 7px 9px;
+    border-radius: 8px;
+    border: 1px solid #334155;
+    background: #0f172a;
+    color: #e2e8f0;
+}
+
+.variable-remove {
+    width: auto;
+    min-width: 74px;
+    height: 34px;
+    padding: 0 12px;
+    font-size: 0.88rem;
+    border-radius: 8px;
+    margin: 0;
+}
+
+#add-variable-form .row-inline {
+    display: grid;
+    grid-template-columns: 1fr 1fr auto;
+    gap: 8px;
+}
+
+#add-var-btn {
+    white-space: nowrap;
+}
+
+.passage-list {
+    max-height: 220px;
+    background: rgba(15, 23, 42, 0.35);
+    border-color: rgba(148, 163, 184, 0.2);
+}
+
+.passage-item {
+    color: #e2e8f0;
+    background: transparent;
+}
+
+.passage-item:hover {
+    color: #f8fafc;
+}
+
+.canvas-controls-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+}
+
+.canvas-controls-grid button {
+    margin: 0 !important;
+    width: 100% !important;
+    min-height: 38px;
+}
+
+.zoom-indicator {
+    grid-column: 1 / -1;
+    border: 1px dashed rgba(148, 163, 184, 0.4);
+    border-radius: 8px;
+    text-align: center;
+    padding: 8px;
+    font-weight: 700;
+    background: rgba(15, 23, 42, 0.25);
+    color: #e2e8f0;
+}
+
+@media (prefers-color-scheme: light) {
+    .variable-group {
+        background: rgba(255, 255, 255, 0.85);
+    }
+
+    .variable-input {
+        background: #fff;
+        color: #0f172a;
+        border-color: #cbd5e1;
+    }
+
+    .passage-list {
+        background: #fff;
+    }
+
+    .passage-item {
+        color: #0f172a;
+    }
+
+    .zoom-indicator {
+        color: #0f172a;
+        background: #fff;
+    }
+}
