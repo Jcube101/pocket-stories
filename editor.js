@@ -21,6 +21,14 @@ let highlightedWarningEdges = new Set();
 let highlightedInfoNodes = new Set();
 let highlightedInfoEdges = new Set();
 let editorEventsBound = false;
+let showSecondaryEdges = true;
+
+const EDGE_TYPES = {
+    PROGRESSION: 'progression',
+    CHOICE: 'choice',
+    JUMP: 'jump',
+    RETURN: 'return'
+};
 
 function normalizeStorageToken(value) {
     return String(value || '')
@@ -44,6 +52,18 @@ function getStoryLayoutStorageKey() {
     };
 }
 
+function normalizeLayoutRecord(record) {
+    if (!record || typeof record !== 'object') return null;
+    const x = Number(record.x);
+    const y = Number(record.y);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+    return {
+        x,
+        y,
+        manualOverride: Boolean(record.manualOverride)
+    };
+}
+
 function getStoryLayout() {
     const { newKey, oldKey } = getStoryLayoutStorageKey();
     const hasNew = localStorage.getItem(newKey) !== null;
@@ -54,7 +74,15 @@ function getStoryLayout() {
     }
 
     try {
-        return JSON.parse(localStorage.getItem(newKey) || '{}');
+        const raw = JSON.parse(localStorage.getItem(newKey) || '{}');
+        const normalized = {};
+        Object.entries(raw).forEach(([id, record]) => {
+            if (typeof record === 'number') return;
+            if (record && typeof record.x === 'number' && typeof record.y === 'number') {
+                normalized[id] = normalizeLayoutRecord(record);
+            }
+        });
+        return normalized;
     } catch (err) {
         console.warn('Failed to parse saved layout from localStorage', err);
         return {};
@@ -64,6 +92,174 @@ function getStoryLayout() {
 function saveStoryLayout(layout) {
     const { newKey } = getStoryLayoutStorageKey();
     localStorage.setItem(newKey, JSON.stringify(layout));
+}
+
+function saveManualNodePosition(id, x, y) {
+    const layout = getStoryLayout();
+    layout[id] = { x, y, manualOverride: true };
+    saveStoryLayout(layout);
+}
+
+function isNodeManuallyPositioned(passage, layoutEntry) {
+    return Boolean(layoutEntry?.manualOverride || passage?.position?.manualOverride === true);
+}
+
+function classifyEdgeType(fromId, toId, choice, layerById) {
+    if (choice.edgeType && Object.values(EDGE_TYPES).includes(choice.edgeType)) {
+        return choice.edgeType;
+    }
+
+    if (choice.return === true || /\breturn\b/i.test(choice.text || '')) return EDGE_TYPES.RETURN;
+    if (choice.jump === true || /\bjump\b/i.test(choice.text || '')) return EDGE_TYPES.JUMP;
+
+    const fromLayer = layerById.get(fromId);
+    const toLayer = layerById.get(toId);
+    if (Number.isFinite(fromLayer) && Number.isFinite(toLayer)) {
+        if (toLayer <= fromLayer) return EDGE_TYPES.RETURN;
+        if (toLayer - fromLayer > 1) return EDGE_TYPES.JUMP;
+    }
+
+    const hasChoiceSignals = Boolean(choice.condition || choice.effect || ((choice.text || '').trim() && (choice.text || '').trim().toLowerCase() !== 'continue'));
+    return hasChoiceSignals ? EDGE_TYPES.CHOICE : EDGE_TYPES.PROGRESSION;
+}
+
+function getPrimaryGraphLayers(passages) {
+    const ids = Object.keys(passages);
+    const adjacency = new Map(ids.map(id => [id, []]));
+    const indegree = new Map(ids.map(id => [id, 0]));
+
+    ids.forEach(id => {
+        (passages[id].choices || []).forEach(ch => {
+            if (!passages[ch.target]) return;
+            adjacency.get(id).push(ch.target);
+            indegree.set(ch.target, (indegree.get(ch.target) || 0) + 1);
+        });
+    });
+
+    const startId = passages.start ? 'start' : ids[0];
+    const queue = [];
+    const layerById = new Map();
+    if (startId) {
+        layerById.set(startId, 0);
+        queue.push(startId);
+    }
+
+    while (queue.length) {
+        const current = queue.shift();
+        const currentLayer = layerById.get(current) || 0;
+        (adjacency.get(current) || []).forEach(next => {
+            const proposed = currentLayer + 1;
+            if (!layerById.has(next) || proposed < layerById.get(next)) {
+                layerById.set(next, proposed);
+                queue.push(next);
+            }
+        });
+    }
+
+    let fallbackLayer = Math.max(0, ...Array.from(layerById.values(), v => v || 0));
+    ids.forEach(id => {
+        if (!layerById.has(id)) {
+            fallbackLayer += 1;
+            layerById.set(id, fallbackLayer);
+        }
+    });
+
+    const layers = new Map();
+    layerById.forEach((layer, id) => {
+        if (!layers.has(layer)) layers.set(layer, []);
+        layers.get(layer).push(id);
+    });
+
+    const parentMap = new Map(ids.map(id => [id, []]));
+    ids.forEach(id => {
+        (adjacency.get(id) || []).forEach(target => {
+            parentMap.get(target).push(id);
+        });
+    });
+
+    Array.from(layers.keys()).sort((a, b) => a - b).forEach(layer => {
+        const idsInLayer = layers.get(layer);
+        idsInLayer.sort((a, b) => {
+            const pa = parentMap.get(a);
+            const pb = parentMap.get(b);
+            const avgA = pa.length ? pa.reduce((sum, pid) => sum + ((layers.get(layer - 1) || []).indexOf(pid) + 1), 0) / pa.length : Number.MAX_SAFE_INTEGER;
+            const avgB = pb.length ? pb.reduce((sum, pid) => sum + ((layers.get(layer - 1) || []).indexOf(pid) + 1), 0) / pb.length : Number.MAX_SAFE_INTEGER;
+            return avgA - avgB || a.localeCompare(b);
+        });
+    });
+
+    return { layerById, layers };
+}
+
+function collectEdges(passages) {
+    const { layerById } = getPrimaryGraphLayers(passages);
+    const edges = [];
+
+    Object.keys(passages).forEach(id => {
+        const p = passages[id];
+        (p.choices || []).forEach((choice, choiceIndex) => {
+            if (!passages[choice.target]) return;
+            const type = classifyEdgeType(id, choice.target, choice, layerById);
+            edges.push({
+                id: `${id}-to-${choice.target}-${choiceIndex}`,
+                from: id,
+                to: choice.target,
+                choiceIndex,
+                choice,
+                type,
+                isPrimary: type === EDGE_TYPES.PROGRESSION || type === EDGE_TYPES.CHOICE
+            });
+        });
+    });
+
+    return { edges, layerById };
+}
+
+function runLayeredAutoLayout(passages) {
+    const { edges, layerById } = collectEdges(passages);
+    const layers = new Map();
+    layerById.forEach((layer, id) => {
+        if (!layers.has(layer)) layers.set(layer, []);
+        layers.get(layer).push(id);
+    });
+
+    const xSpacing = 430;
+    const ySpacing = 250;
+    const originX = 140;
+    const originY = 130;
+    const layout = getStoryLayout();
+    const positions = {};
+
+    Array.from(layers.keys()).sort((a, b) => a - b).forEach(layer => {
+        const ids = layers.get(layer);
+        ids.sort((a, b) => {
+            const aParents = edges.filter(e => e.isPrimary && e.to === a).map(e => e.from);
+            const bParents = edges.filter(e => e.isPrimary && e.to === b).map(e => e.from);
+            const aAvg = aParents.length ? aParents.reduce((sum, pid) => sum + (positions[pid]?.y || originY), 0) / aParents.length : Number.MAX_SAFE_INTEGER;
+            const bAvg = bParents.length ? bParents.reduce((sum, pid) => sum + (positions[pid]?.y || originY), 0) / bParents.length : Number.MAX_SAFE_INTEGER;
+            return aAvg - bAvg || a.localeCompare(b);
+        });
+
+        ids.forEach((id, row) => {
+            const passage = passages[id];
+            const saved = layout[id];
+            const hasManual = isNodeManuallyPositioned(passage, saved);
+            if (hasManual) {
+                positions[id] = {
+                    x: (passage.position && passage.position.manualOverride === true) ? passage.position.x : (saved?.x ?? passage.position?.x),
+                    y: (passage.position && passage.position.manualOverride === true) ? passage.position.y : (saved?.y ?? passage.position?.y)
+                };
+                return;
+            }
+
+            positions[id] = {
+                x: originX + layer * xSpacing,
+                y: originY + row * ySpacing
+            };
+        });
+    });
+
+    return positions;
 }
 
 async function hashText(text) {
@@ -128,14 +324,7 @@ function initEditor() {
         </marker>
     </defs>`;
 
-    // Create nodes with safe initial positions
-    let index = 0;
-    Object.keys(window.storyData.passages).forEach(id => {
-        const p = window.storyData.passages[id];
-        createNode(id, p.text.trim(), index++);
-    });
-
-        // Ensure start passage exists
+    // Ensure start passage exists
     if (!window.storyData.passages.start) {
         window.storyData.passages.start = {
             text: "You begin your adventure...\n\nWhat do you do?",
@@ -143,6 +332,18 @@ function initEditor() {
         };
         console.log('Auto-created missing start passage');
     }
+
+    const autoPositions = runLayeredAutoLayout(window.storyData.passages);
+
+    // Create nodes with safe initial positions
+    let index = 0;
+    Object.keys(window.storyData.passages).forEach(id => {
+        const p = window.storyData.passages[id];
+        if (!p.position && autoPositions[id]) {
+            p.position = { ...autoPositions[id], manualOverride: false };
+        }
+        createNode(id, p.text.trim(), index++);
+    });
 
     // Draw connections
     drawConnections();
@@ -184,6 +385,21 @@ function initEditor() {
     if (focusStartBtn) focusStartBtn.onclick = () => jumpToPassage('start');
     const focusStartClusterBtn = document.getElementById('focus-start-cluster');
     if (focusStartClusterBtn) focusStartClusterBtn.onclick = () => focusStartCluster();
+    const toggleSecondaryEdges = document.getElementById('toggle-secondary-edges');
+    if (toggleSecondaryEdges) {
+        toggleSecondaryEdges.checked = showSecondaryEdges;
+        toggleSecondaryEdges.onchange = (event) => {
+            showSecondaryEdges = event.target.checked;
+            drawConnections();
+        };
+    }
+
+    const autoLayoutBtn = document.getElementById('auto-layout');
+    if (autoLayoutBtn) {
+        autoLayoutBtn.onclick = () => {
+            applyAutoLayout();
+        };
+    }
 
     updateZoomIndicator();
 
@@ -364,11 +580,10 @@ function createNode(id, text, index) {
             }
             window.storyData.passages[id].position.x = newX;
             window.storyData.passages[id].position.y = newY;
+            window.storyData.passages[id].position.manualOverride = true;
 
-            // Fixed: save current position to localStorage
-            const layout = getStoryLayout();
-            layout[id] = { x: newX, y: newY };
-            saveStoryLayout(layout);
+            // Persist manual override so auto-layout never clobbers designer adjustments
+            saveManualNodePosition(id, newX, newY);
 
             drawConnections();
             saveState(); // for undo/redo
@@ -443,143 +658,150 @@ document.addEventListener('mouseup', e => {
     connectingFrom = null;
 });
 
+function buildEdgePath(edge, fromNode, toNode) {
+    const fromX = parseFloat(fromNode.style.left) + fromNode.offsetWidth;
+    const fromY = parseFloat(fromNode.style.top) + fromNode.offsetHeight / 2;
+    const toX = parseFloat(toNode.style.left);
+    const toY = parseFloat(toNode.style.top) + toNode.offsetHeight / 2;
+
+    const deltaY = toY - fromY;
+    const horizontal = Math.max(120, Math.abs(toX - fromX) / 3);
+    let offset = Math.abs(deltaY) < 100 ? 80 : Math.sign(deltaY) * 150;
+
+    if (edge.type === EDGE_TYPES.JUMP || edge.type === EDGE_TYPES.RETURN) {
+        offset = Math.sign(deltaY || 1) * 220;
+    }
+
+    const cp1x = fromX + horizontal;
+    const cp1y = fromY + offset;
+    const cp2x = toX - horizontal;
+    const cp2y = toY - offset;
+    return `M ${fromX} ${fromY} C ${cp1x} ${cp1y} ${cp2x} ${cp2y} ${toX} ${toY}`;
+}
+
+function applyEdgeValidationClasses(path, edgeKey, connId) {
+    if (highlightedCycleEdges.has(edgeKey)) {
+        path.classList.add('cycle-edge');
+    }
+
+    if (highlightedErrorEdges.has(connId)) {
+        path.classList.add('validation-edge-error');
+    } else if (highlightedWarningEdges.has(connId)) {
+        path.classList.add('validation-edge-warning');
+    } else if (highlightedInfoEdges.has(connId)) {
+        path.classList.add('validation-edge-info');
+    }
+}
+
 function drawConnections() {
-    // Clear and re-add marker only (no viewBox, no sizing)
     svgCanvas.innerHTML = `<defs>
         <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
             <path d="M0,0 L0,6 L9,3 z" fill="#666" />
         </marker>
     </defs>`;
 
-    Object.keys(window.storyData.passages).forEach(id => {
-        const p = window.storyData.passages[id];
-        if (!p.choices) return;
+    const passages = window.storyData.passages || {};
+    const { edges } = collectEdges(passages);
+    const orderedEdges = [
+        ...edges.filter(edge => !edge.isPrimary),
+        ...edges.filter(edge => edge.isPrimary)
+    ];
 
-        const fromNode = document.querySelector(`.node[data-id="${id}"]`);
-        if (!fromNode) return;
+    orderedEdges.forEach(edge => {
+        if (!showSecondaryEdges && !edge.isPrimary) return;
 
-        // Logical positions (same space as node.style.left/top)
-        const fromX = parseFloat(fromNode.style.left) + fromNode.offsetWidth;
-        const fromY = parseFloat(fromNode.style.top) + fromNode.offsetHeight / 2;
+        const fromNode = document.querySelector(`.node[data-id="${edge.from}"]`);
+        const toNode = document.querySelector(`.node[data-id="${edge.to}"]`);
+        if (!fromNode || !toNode) return;
 
-        p.choices.forEach((ch, choiceIndex) => {
-            const toNode = document.querySelector(`.node[data-id="${ch.target}"]`);
-            if (!toNode) return;
+        const pathD = buildEdgePath(edge, fromNode, toNode);
+        const edgeKey = `${edge.from}->${edge.to}`;
 
-            const toX = parseFloat(toNode.style.left);
-            const toY = parseFloat(toNode.style.top) + toNode.offsetHeight / 2;
+        const defPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        defPath.id = `textpath-${edge.id}`;
+        defPath.setAttribute('d', pathD);
+        defPath.style.display = 'none';
+        svgCanvas.appendChild(defPath);
 
-            const connId = `${id}-to-${ch.target}-${choiceIndex}`;
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path.setAttribute('d', pathD);
+        path.classList.add('connection-path', `edge-${edge.type}`);
+        if (!edge.isPrimary) path.classList.add('edge-secondary');
+        path.setAttribute('marker-end', 'url(#arrow)');
+        path.dataset.from = edge.from;
+        path.dataset.to = edge.to;
+        path.dataset.index = edge.choiceIndex;
+        applyEdgeValidationClasses(path, edgeKey, edge.id);
 
-            // Smarter routing: vertical offset to avoid node overlap
-            const deltaY = toY - fromY;
-            const horizontal = Math.max(120, Math.abs(toX - fromX) / 3); // wider on long links
-            const offset = Math.abs(deltaY) < 100 ? 80 : Math.sign(deltaY) * 150; // pronounced arc for vertical separation
-
-            const cp1x = fromX + horizontal;
-            const cp1y = fromY + offset;
-            const cp2x = toX - horizontal;
-            const cp2y = toY - offset;
-
-            const pathD = `M ${fromX} ${fromY} C ${cp1x} ${cp1y} ${cp2x} ${cp2y} ${toX} ${toY}`;
-
-            // Hidden def for textPath
-            const defPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
-            defPath.id = `textpath-${connId}`;
-            defPath.setAttribute("d", pathD);
-            defPath.style.display = "none";
-            svgCanvas.appendChild(defPath);
-
-            // Visible path
-            const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-            path.setAttribute("d", pathD);
-            path.classList.add("connection-path");
-            path.setAttribute("marker-end", "url(#arrow)");
-            svgCanvas.appendChild(path);
-
-            // Connection selection
-            path.dataset.from = id;
-            path.dataset.to = ch.target;
-            path.dataset.index = choiceIndex;
-
-            path.addEventListener('click', e => {
-                e.stopPropagation();
-                if (selectedNode) {
-                    selectedNode.classList.remove('selected');
-                    selectedNode = null;
-                }
-                document.querySelectorAll('.connection-path.selected').forEach(p => p.classList.remove('selected'));
-                path.classList.add('selected');
-            });
-
-            const edgeKey = `${id}->${ch.target}`;
-            if (highlightedCycleEdges.has(edgeKey)) {
-                path.classList.add('cycle-edge');
+        path.addEventListener('click', e => {
+            e.stopPropagation();
+            if (selectedNode) {
+                selectedNode.classList.remove('selected');
+                selectedNode = null;
             }
-
-            if (highlightedErrorEdges.has(connId)) {
-                path.classList.add('validation-edge-error');
-            } else if (highlightedWarningEdges.has(connId)) {
-                path.classList.add('validation-edge-warning');
-            } else if (highlightedInfoEdges.has(connId)) {
-                path.classList.add('validation-edge-info');
-            }
-
-            // Right-click action menu for connection
-            path.addEventListener('contextmenu', e => {
-                e.preventDefault();
-                const action = prompt('Connection action: type "edit" to edit, "delete" to remove.', 'edit');
-                if (!action) return;
-
-                if (action.toLowerCase() === 'delete') {
-                    if (confirm(`Delete connection "${ch.text || 'Continue'}" from ${id} to ${ch.target}?`)) {
-                        window.storyData.passages[id].choices.splice(choiceIndex, 1);
-                        drawConnections();
-                        saveState();
-                    }
-                    return;
-                }
-
-                if (action.toLowerCase() !== 'edit') return;
-
-                const newText = prompt('Choice text', ch.text || '');
-                if (newText !== null) ch.text = newText || undefined;
-                const cond = prompt('Condition (optional)', ch.condition || '');
-                if (cond !== null) ch.condition = cond || undefined;
-                const eff = prompt('Effect (optional)', ch.effect || '');
-                if (eff !== null) {
-                    const nextEffect = eff || undefined;
-                    if (nextEffect && typeof window.parseStoryEffect === 'function') {
-                        const parsedEffect = window.parseStoryEffect(nextEffect);
-                        if (!parsedEffect.ok) {
-                            console.error('[EffectParser] Invalid effect:', nextEffect, '-', parsedEffect.error);
-                            alert(`Invalid effect: ${parsedEffect.error}`);
-                            return;
-                        }
-                    }
-                    ch.effect = nextEffect;
-                }
-                drawConnections();
-                saveState();
-            });
-
-            // Label
-            let labelText = ch.text || "Continue";
-            if (ch.condition) labelText += ` [if ${ch.condition}]`;
-            if (ch.effect) labelText += ` [${ch.effect}]`;
-
-            const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
-            const textPath = document.createElementNS("http://www.w3.org/2000/svg", "textPath");
-            textPath.setAttribute("href", `#textpath-${connId}`);
-            textPath.setAttribute("startOffset", "50%");
-            textPath.setAttribute("text-anchor", "middle");
-            textPath.textContent = labelText;
-            textPath.style.fontSize = "13px";
-            textPath.style.fill = "#e2e8f0";
-            text.appendChild(textPath);
-            svgCanvas.appendChild(text);
-
+            document.querySelectorAll('.connection-path.selected').forEach(p => p.classList.remove('selected'));
+            path.classList.add('selected');
         });
+
+        path.addEventListener('contextmenu', e => {
+            e.preventDefault();
+            const action = prompt('Connection action: type "edit" to edit, "delete" to remove.', 'edit');
+            if (!action) return;
+
+            const sourceChoices = window.storyData.passages[edge.from].choices;
+            const choice = sourceChoices[edge.choiceIndex];
+            if (!choice) return;
+
+            if (action.toLowerCase() === 'delete') {
+                if (confirm(`Delete connection "${choice.text || 'Continue'}" from ${edge.from} to ${edge.to}?`)) {
+                    sourceChoices.splice(edge.choiceIndex, 1);
+                    drawConnections();
+                    saveState();
+                }
+                return;
+            }
+
+            if (action.toLowerCase() !== 'edit') return;
+
+            const newText = prompt('Choice text', choice.text || '');
+            if (newText !== null) choice.text = newText || undefined;
+            const cond = prompt('Condition (optional)', choice.condition || '');
+            if (cond !== null) choice.condition = cond || undefined;
+            const eff = prompt('Effect (optional)', choice.effect || '');
+            if (eff !== null) {
+                const nextEffect = eff || undefined;
+                if (nextEffect && typeof window.parseStoryEffect === 'function') {
+                    const parsedEffect = window.parseStoryEffect(nextEffect);
+                    if (!parsedEffect.ok) {
+                        console.error('[EffectParser] Invalid effect:', nextEffect, '-', parsedEffect.error);
+                        alert(`Invalid effect: ${parsedEffect.error}`);
+                        return;
+                    }
+                }
+                choice.effect = nextEffect;
+            }
+            drawConnections();
+            saveState();
+        });
+
+        svgCanvas.appendChild(path);
+
+        let labelText = edge.choice.text || 'Continue';
+        if (edge.choice.condition) labelText += ` [if ${edge.choice.condition}]`;
+        if (edge.choice.effect) labelText += ` [${edge.choice.effect}]`;
+
+        const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        text.classList.add('connection-label', `edge-${edge.type}`);
+        if (!edge.isPrimary) text.classList.add('edge-secondary');
+        const textPath = document.createElementNS('http://www.w3.org/2000/svg', 'textPath');
+        textPath.setAttribute('href', `#textpath-${edge.id}`);
+        textPath.setAttribute('startOffset', '50%');
+        textPath.setAttribute('text-anchor', 'middle');
+        textPath.textContent = labelText;
+        textPath.style.fontSize = '13px';
+        textPath.style.fill = '#e2e8f0';
+        text.appendChild(textPath);
+        svgCanvas.appendChild(text);
     });
 
     document.querySelectorAll('.node').forEach(node => {
@@ -593,6 +815,30 @@ function drawConnections() {
 
     const searchInput = document.getElementById('passage-search');
     if (searchInput) applyPassageSearch(searchInput.value || '');
+}
+
+function applyAutoLayout() {
+    const autoPositions = runLayeredAutoLayout(window.storyData.passages || {});
+    Object.entries(autoPositions).forEach(([id, pos]) => {
+        const node = document.querySelector(`.node[data-id="${id}"]`);
+        if (!node) return;
+
+        const layout = getStoryLayout();
+        const passage = window.storyData.passages[id];
+        const locked = isNodeManuallyPositioned(passage, layout[id]);
+        if (locked) return;
+
+        node.style.left = `${pos.x}px`;
+        node.style.top = `${pos.y}px`;
+        if (!window.storyData.passages[id].position) window.storyData.passages[id].position = {};
+        window.storyData.passages[id].position.x = pos.x;
+        window.storyData.passages[id].position.y = pos.y;
+        window.storyData.passages[id].position.manualOverride = false;
+    });
+
+    drawConnections();
+    expandCanvasIfNeeded();
+    saveState();
 }
 
 function jumpToPassage(id) {
