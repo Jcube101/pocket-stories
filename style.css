@@ -1041,3 +1041,60 @@ h1 {
     .risk-unresolved { background: #4a3412; color: #fde68a; }
     .risk-unreachable { background: #1e3a5f; color: #bfdbfe; }
 }
+
+
+#diagnostics-section {
+    max-height: 34vh;
+    display: flex;
+    flex-direction: column;
+}
+
+#diagnostics-summary {
+    font-size: 0.8rem;
+    margin-bottom: 0.5rem;
+    opacity: 0.85;
+}
+
+.diagnostics-panel {
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+}
+
+.diagnostic-row {
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    padding: 0.45rem;
+    background: #fff;
+}
+
+.diagnostic-row.severity-error { border-left: 4px solid #dc2626; }
+.diagnostic-row.severity-warning { border-left: 4px solid #d97706; }
+.diagnostic-row.severity-info { border-left: 4px solid #2563eb; }
+
+.diagnostic-message { font-size: 0.82rem; line-height: 1.35; }
+.diagnostic-actions { margin-top: 0.35rem; display: flex; gap: 0.35rem; }
+.diagnostic-actions button { font-size: 0.72rem; padding: 0.2rem 0.4rem; }
+.autofix-btn { background: #d1fae5; border: 1px solid #10b981; }
+
+.risk-no-exit { background: #ffedd5; color: #9a3412; }
+.risk-dangling { background: #fee2e2; color: #991b1b; }
+.risk-cycle { background: #e0e7ff; color: #3730a3; }
+
+.node-downstream-highlight {
+    box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.65);
+}
+
+.connection-path.edge-downstream-highlight {
+    stroke-width: 4px;
+    stroke: #10b981;
+}
+
+@media (prefers-color-scheme: dark) {
+    .diagnostic-row { background: #222; border-color: #444; }
+    .autofix-btn { background: #064e3b; color: #d1fae5; border-color: #34d399; }
+    .risk-no-exit { background: #4a250e; color: #fdba74; }
+    .risk-dangling { background: #4b1d1d; color: #fecaca; }
+    .risk-cycle { background: #312e81; color: #c7d2fe; }
+}
