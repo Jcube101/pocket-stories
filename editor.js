@@ -23,6 +23,7 @@ let highlightedInfoEdges = new Set();
 let editorEventsBound = false;
 let showSecondaryEdges = true;
 let inspectorEls = null;
+let editorUiState = { collapsedById: {}, focusCriticalPath: false };
 
 const NODE_VARIANTS = {
     start: { label: 'Start', icon: '🚩', className: 'variant-start' },
@@ -66,6 +67,40 @@ function getStoryLayoutStorageKey() {
         newKey: `pocketstories_layout_${primaryToken}`,
         oldKey: `pocketstories_layout_${window.storyData?.title || 'untitled'}`
     };
+}
+
+function getStoryEditorUiStateStorageKey() {
+    const { newKey } = getStoryLayoutStorageKey();
+    return `${newKey}_ui`;
+}
+
+function normalizeEditorUiState(rawState) {
+    const collapsedById = {};
+    const rawCollapsed = rawState && typeof rawState.collapsedById === 'object' ? rawState.collapsedById : {};
+    Object.entries(rawCollapsed).forEach(([id, value]) => {
+        if (value === true) collapsedById[id] = true;
+    });
+
+    return {
+        collapsedById,
+        focusCriticalPath: Boolean(rawState?.focusCriticalPath)
+    };
+}
+
+function getStoryEditorUiState() {
+    const key = getStoryEditorUiStateStorageKey();
+    try {
+        const parsed = JSON.parse(localStorage.getItem(key) || '{}');
+        return normalizeEditorUiState(parsed);
+    } catch (error) {
+        console.warn('Failed to parse editor UI state', error);
+        return { collapsedById: {}, focusCriticalPath: false };
+    }
+}
+
+function saveStoryEditorUiState() {
+    const key = getStoryEditorUiStateStorageKey();
+    localStorage.setItem(key, JSON.stringify(editorUiState));
 }
 
 function normalizeLayoutRecord(record) {
@@ -231,6 +266,121 @@ function collectEdges(passages) {
     return { edges, layerById };
 }
 
+function getAdjacencyMap(passages) {
+    const adjacency = new Map(Object.keys(passages).map(id => [id, []]));
+    Object.keys(passages).forEach(id => {
+        (passages[id].choices || []).forEach((choice, index) => {
+            if (!passages[choice.target]) return;
+            adjacency.get(id).push({ target: choice.target, choice, index });
+        });
+    });
+    return adjacency;
+}
+
+function collectCollapsedDescendants(passages, collapsedById) {
+    const hidden = new Set();
+    const adjacency = getAdjacencyMap(passages);
+
+    Object.keys(collapsedById || {}).forEach(id => {
+        if (!collapsedById[id] || !passages[id]) return;
+        const queue = [...(adjacency.get(id) || []).map(edge => edge.target)];
+        while (queue.length) {
+            const current = queue.shift();
+            if (hidden.has(current)) continue;
+            hidden.add(current);
+            (adjacency.get(current) || []).forEach(edge => queue.push(edge.target));
+        }
+    });
+
+    return hidden;
+}
+
+function collectCriticalPathNodes(passages) {
+    const startId = passages.start ? 'start' : Object.keys(passages)[0];
+    if (!startId) return new Set();
+    const { edges } = collectEdges(passages);
+    const outgoing = new Map(Object.keys(passages).map(id => [id, []]));
+    edges.forEach(edge => outgoing.get(edge.from).push(edge));
+
+    const memo = new Map();
+    const visiting = new Set();
+    function score(id) {
+        if (memo.has(id)) return memo.get(id);
+        if (visiting.has(id)) return 0;
+        visiting.add(id);
+        const options = outgoing.get(id) || [];
+        const best = options.reduce((max, edge) => Math.max(max, score(edge.to)), 0);
+        const total = 1 + best;
+        visiting.delete(id);
+        memo.set(id, total);
+        return total;
+    }
+
+    const critical = new Set();
+    let cursor = startId;
+    const seen = new Set();
+    while (cursor && !seen.has(cursor)) {
+        seen.add(cursor);
+        critical.add(cursor);
+        const options = (outgoing.get(cursor) || []).slice().sort((a, b) => {
+            if (a.isPrimary !== b.isPrimary) return a.isPrimary ? -1 : 1;
+            return score(b.to) - score(a.to);
+        });
+        cursor = options[0]?.to || null;
+    }
+
+    return critical;
+}
+
+function getRenderedGraphState(passages) {
+    const hiddenNodes = collectCollapsedDescendants(passages, editorUiState.collapsedById);
+    const visibleNodes = new Set(Object.keys(passages).filter(id => !hiddenNodes.has(id)));
+    const { edges } = collectEdges(passages);
+    const adjacency = new Map(Object.keys(passages).map(id => [id, []]));
+    edges.forEach(edge => adjacency.get(edge.from).push(edge));
+
+    const renderedEdges = [];
+    edges.forEach(edge => {
+        if (visibleNodes.has(edge.from) && visibleNodes.has(edge.to)) {
+            renderedEdges.push({ ...edge, rerouted: false });
+            return;
+        }
+
+        if (!visibleNodes.has(edge.from) || visibleNodes.has(edge.to)) return;
+
+        const queue = [edge.to];
+        const visited = new Set(queue);
+        const rerouteTargets = new Set();
+        while (queue.length) {
+            const current = queue.shift();
+            if (visibleNodes.has(current)) {
+                rerouteTargets.add(current);
+                continue;
+            }
+            (adjacency.get(current) || []).forEach(nextEdge => {
+                if (!visited.has(nextEdge.to)) {
+                    visited.add(nextEdge.to);
+                    queue.push(nextEdge.to);
+                }
+            });
+        }
+
+        rerouteTargets.forEach(target => {
+            if (target === edge.from) return;
+            renderedEdges.push({
+                ...edge,
+                id: `${edge.id}-via-${target}`,
+                to: target,
+                rerouted: true
+            });
+        });
+    });
+
+    const criticalNodes = editorUiState.focusCriticalPath ? collectCriticalPathNodes(passages) : null;
+
+    return { visibleNodes, renderedEdges, criticalNodes };
+}
+
 function getIncomingCounts(passages) {
     const counts = {};
     Object.keys(passages || {}).forEach(id => { counts[id] = 0; });
@@ -304,13 +454,15 @@ function refreshNodeCard(nodeId) {
         })
         .join('');
 
+    const isCollapsed = editorUiState.collapsedById[nodeId] === true;
     node.className = `node ${variant.className}`;
     if (selectedNode === node) node.classList.add('selected');
+    if (isCollapsed) node.classList.add('node-collapsed');
     node.innerHTML = `
         <div class="node-header">
             <span class="node-variant-icon">${variant.icon}</span>
             <div class="node-header-text">
-                <div class="node-title">${escapeHtml(nodeId)}</div>
+                <div class="node-title">${escapeHtml(nodeId)} ${isCollapsed ? '<span class="collapsed-tag">▾ collapsed</span>' : ''}</div>
                 <div class="node-subtitle">${variant.label}</div>
             </div>
         </div>
@@ -475,6 +627,11 @@ function initEditor() {
     }
 
     const autoPositions = runLayeredAutoLayout(window.storyData.passages);
+    editorUiState = getStoryEditorUiState();
+    editorUiState.collapsedById = Object.fromEntries(
+        Object.entries(editorUiState.collapsedById).filter(([id, collapsed]) => collapsed && Boolean(window.storyData.passages[id]))
+    );
+    saveStoryEditorUiState();
 
     // Create nodes with safe initial positions
     let index = 0;
@@ -522,6 +679,11 @@ function initEditor() {
 
             window.storyData.passages[nextId] = JSON.parse(JSON.stringify(window.storyData.passages[originalId]));
             delete window.storyData.passages[originalId];
+            if (editorUiState.collapsedById[originalId]) {
+                editorUiState.collapsedById[nextId] = true;
+            }
+            delete editorUiState.collapsedById[originalId];
+            saveStoryEditorUiState();
 
             Object.values(window.storyData.passages).forEach(p => {
                 (p.choices || []).forEach(choice => {
@@ -587,6 +749,16 @@ function initEditor() {
         toggleSecondaryEdges.checked = showSecondaryEdges;
         toggleSecondaryEdges.onchange = (event) => {
             showSecondaryEdges = event.target.checked;
+            drawConnections();
+        };
+    }
+
+    const focusCriticalPathToggle = document.getElementById('focus-critical-path');
+    if (focusCriticalPathToggle) {
+        focusCriticalPathToggle.checked = editorUiState.focusCriticalPath;
+        focusCriticalPathToggle.onchange = (event) => {
+            editorUiState.focusCriticalPath = event.target.checked;
+            saveStoryEditorUiState();
             drawConnections();
         };
     }
@@ -844,10 +1016,10 @@ function drawConnections() {
     </defs>`;
 
     const passages = window.storyData.passages || {};
-    const { edges } = collectEdges(passages);
+    const { visibleNodes, renderedEdges, criticalNodes } = getRenderedGraphState(passages);
     const orderedEdges = [
-        ...edges.filter(edge => !edge.isPrimary),
-        ...edges.filter(edge => edge.isPrimary)
+        ...renderedEdges.filter(edge => !edge.isPrimary),
+        ...renderedEdges.filter(edge => edge.isPrimary)
     ];
 
     orderedEdges.forEach(edge => {
@@ -870,6 +1042,10 @@ function drawConnections() {
         path.setAttribute('d', pathD);
         path.classList.add('connection-path', `edge-${edge.type}`);
         if (!edge.isPrimary) path.classList.add('edge-secondary');
+        if (edge.rerouted) path.classList.add('edge-rerouted');
+        if (criticalNodes && (!criticalNodes.has(edge.from) || !criticalNodes.has(edge.to))) {
+            path.classList.add('edge-dimmed');
+        }
         path.setAttribute('marker-end', 'url(#arrow)');
         path.dataset.from = edge.from;
         path.dataset.to = edge.to;
@@ -927,12 +1103,16 @@ function drawConnections() {
         svgCanvas.appendChild(path);
 
         let labelText = edge.choice.text || 'Continue';
+        if (edge.rerouted) labelText = `↷ ${labelText}`;
         if (edge.choice.condition) labelText += ` [if ${edge.choice.condition}]`;
         if (edge.choice.effect) labelText += ` [${edge.choice.effect}]`;
 
         const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
         text.classList.add('connection-label', `edge-${edge.type}`);
         if (!edge.isPrimary) text.classList.add('edge-secondary');
+        if (criticalNodes && (!criticalNodes.has(edge.from) || !criticalNodes.has(edge.to))) {
+            text.classList.add('edge-dimmed');
+        }
         const textPath = document.createElementNS('http://www.w3.org/2000/svg', 'textPath');
         textPath.setAttribute('href', `#textpath-${edge.id}`);
         textPath.setAttribute('startOffset', '50%');
@@ -946,16 +1126,63 @@ function drawConnections() {
 
     document.querySelectorAll('.node').forEach(node => {
         const nodeId = node.dataset.id;
+        const isVisible = visibleNodes.has(nodeId);
+        node.classList.toggle('node-hidden', !isVisible);
+        if (!isVisible) {
+            if (selectedNode === node) {
+                selectNodeByElement(null);
+            }
+            return;
+        }
+
         refreshNodeCard(nodeId);
         node.classList.toggle('cycle-node', highlightedCycleNodes.has(nodeId));
         node.classList.toggle('unreachable-node', highlightedUnreachableNodes.has(nodeId));
         node.classList.toggle('validation-node-error', highlightedErrorNodes.has(nodeId));
         node.classList.toggle('validation-node-warning', highlightedWarningNodes.has(nodeId));
         node.classList.toggle('validation-node-info', highlightedInfoNodes.has(nodeId));
+        node.classList.toggle('node-dimmed', Boolean(criticalNodes) && !criticalNodes.has(nodeId));
     });
 
     const searchInput = document.getElementById('passage-search');
     if (searchInput) applyPassageSearch(searchInput.value || '');
+}
+
+
+function toggleNodeCollapsed(id) {
+    if (!id || !window.storyData.passages[id]) return;
+    editorUiState.collapsedById[id] = !editorUiState.collapsedById[id];
+    if (!editorUiState.collapsedById[id]) {
+        delete editorUiState.collapsedById[id];
+    }
+    saveStoryEditorUiState();
+    drawConnections();
+}
+
+function expandNodesInViewport() {
+    const wrapper = document.getElementById('canvas-wrapper');
+    if (!wrapper) return;
+    const viewportLeft = -pan.x / scale;
+    const viewportTop = -pan.y / scale;
+    const viewportRight = viewportLeft + wrapper.clientWidth / scale;
+    const viewportBottom = viewportTop + wrapper.clientHeight / scale;
+
+    let changed = false;
+    document.querySelectorAll('.node').forEach(node => {
+        const id = node.dataset.id;
+        const x = parseFloat(node.style.left);
+        const y = parseFloat(node.style.top);
+        const within = x < viewportRight && (x + node.offsetWidth) > viewportLeft && y < viewportBottom && (y + node.offsetHeight) > viewportTop;
+        if (within && editorUiState.collapsedById[id]) {
+            delete editorUiState.collapsedById[id];
+            changed = true;
+        }
+    });
+
+    if (changed) {
+        saveStoryEditorUiState();
+        drawConnections();
+    }
 }
 
 function applyAutoLayout() {
@@ -1805,8 +2032,21 @@ if (loadStoryInput) {
 
 // Keyboard shortcuts
 document.addEventListener('keydown', e => {
+    const activeTag = document.activeElement?.tagName;
+    const isTypingContext = activeTag === 'INPUT' || activeTag === 'TEXTAREA' || document.activeElement?.isContentEditable;
+
+    if (!isTypingContext && e.altKey && (e.key === 'c' || e.key === 'C') && selectedNode) {
+        e.preventDefault();
+        toggleNodeCollapsed(selectedNode.dataset.id);
+    }
+
+    if (!isTypingContext && e.altKey && (e.key === 'e' || e.key === 'E')) {
+        e.preventDefault();
+        expandNodesInViewport();
+    }
+
     // Delete selected node
-    if ((e.key === 'Delete' || e.key === 'Backspace') && selectedNode) {
+    if (!isTypingContext && (e.key === 'Delete' || e.key === 'Backspace') && selectedNode) {
         const id = selectedNode.dataset.id;
         const incoming = Object.keys(window.storyData.passages).filter(pid =>
             (window.storyData.passages[pid].choices || []).some(ch => ch.target === id)
@@ -1824,6 +2064,8 @@ document.addEventListener('keydown', e => {
         const message = `${warnings.length ? `⚠ ${warnings.join('\n')}` : ''}\n\nDelete passage "${id}" and all connections to/from it?`;
         if (confirm(message.trim())) {
             delete window.storyData.passages[id];
+            delete editorUiState.collapsedById[id];
+            saveStoryEditorUiState();
             // Remove incoming connections
             Object.keys(window.storyData.passages).forEach(pid => {
                 if (window.storyData.passages[pid].choices) {
