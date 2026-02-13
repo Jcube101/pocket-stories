@@ -1109,14 +1109,29 @@ if (loadStoryInput) {
                 const raw = ev.target.result;
                 const isJson = file.name.toLowerCase().endsWith('.json');
                 const parsed = isJson ? JSON.parse(raw) : jsyaml.load(raw);
-                if (!parsed || !parsed.passages) throw new Error('Invalid story file: missing passages');
-                window.storyData = parsed;
-                variables = JSON.parse(JSON.stringify(normalizeVariables(parsed.variables)));
-                window.storyData.variables = JSON.parse(JSON.stringify(variables));
-                initEditor();
-                if (typeof initPlayer === 'function') initPlayer();
-                if (typeof window.setStoryStatus === 'function') {
-                    window.setStoryStatus(`Imported: ${file.name}`, 'success');
+                if (typeof window.loadStoryData === 'function') {
+                    window.loadStoryData(parsed, file.name);
+                } else {
+                    const validator = window.validateAndNormalizeStory;
+                    const result = typeof validator === 'function'
+                        ? validator(parsed)
+                        : { ok: true, data: parsed, warnings: [], errors: [] };
+
+                    if (!result.ok) {
+                        throw new Error(result.errors.join(' | '));
+                    }
+
+                    window.storyData = result.data;
+                    variables = JSON.parse(JSON.stringify(normalizeVariables(window.storyData.variables)));
+                    window.storyData.variables = JSON.parse(JSON.stringify(variables));
+                    initEditor();
+                    if (typeof initPlayer === 'function') initPlayer();
+
+                    if (result.warnings.length > 0 && typeof window.setStoryStatus === 'function') {
+                        window.setStoryStatus(`Imported with ${result.warnings.length} warning(s): ${file.name}`, 'warning');
+                    } else if (typeof window.setStoryStatus === 'function') {
+                        window.setStoryStatus(`Imported: ${file.name}`, 'success');
+                    }
                 }
                 alert(`Story imported: ${file.name}`);
             } catch (err) {
