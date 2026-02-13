@@ -23,7 +23,7 @@ let highlightedInfoEdges = new Set();
 let editorEventsBound = false;
 let showSecondaryEdges = true;
 let inspectorEls = null;
-let editorUiState = { collapsedById: {}, focusCriticalPath: false };
+let editorUiState = { collapsedById: {}, focusCriticalPath: false, canvasViewMode: 'author' };
 let diagnosticsState = { issues: [], analyzers: {}, byNode: {} };
 let hoveredNodeId = null;
 let downstreamHighlight = { nodes: new Set(), edges: new Set() };
@@ -57,6 +57,56 @@ const EDGE_TYPES = {
     CHOICE: 'choice',
     JUMP: 'jump',
     RETURN: 'return'
+};
+
+const VIEW_MODES = {
+    AUTHOR: 'author',
+    LOGIC: 'logic',
+    PLAYTEST: 'playtest'
+};
+
+const VIEW_MODE_ORDER = [VIEW_MODES.AUTHOR, VIEW_MODES.LOGIC, VIEW_MODES.PLAYTEST];
+
+const VIEW_MODE_PRESETS = {
+    [VIEW_MODES.AUTHOR]: {
+        label: 'Author',
+        nodeTemplate: {
+            start: { label: 'Start', icon: '🚩', className: 'variant-start' },
+            dialogue: { label: 'Dialogue', icon: '💬', className: 'variant-dialogue' },
+            choice: { label: 'Choice', icon: '🔀', className: 'variant-choice' },
+            condition: { label: 'Condition', icon: '🧪', className: 'variant-condition' },
+            merge: { label: 'Merge', icon: '🧷', className: 'variant-merge' },
+            ending: { label: 'Ending', icon: '🏁', className: 'variant-ending' }
+        },
+        edgeStyleClass: 'edge-style-author',
+        defaultFilters: { showSecondaryEdges: true, focusCriticalPath: false, highlightFullDownstream: false }
+    },
+    [VIEW_MODES.LOGIC]: {
+        label: 'Logic',
+        nodeTemplate: {
+            start: { label: 'Entry', icon: '⊙', className: 'variant-start' },
+            dialogue: { label: 'Step', icon: '◻', className: 'variant-dialogue' },
+            choice: { label: 'Branch', icon: '⋈', className: 'variant-choice' },
+            condition: { label: 'Gate', icon: '◇', className: 'variant-condition' },
+            merge: { label: 'Merge', icon: '⋃', className: 'variant-merge' },
+            ending: { label: 'Terminal', icon: '◎', className: 'variant-ending' }
+        },
+        edgeStyleClass: 'edge-style-logic',
+        defaultFilters: { showSecondaryEdges: true, focusCriticalPath: true, highlightFullDownstream: false }
+    },
+    [VIEW_MODES.PLAYTEST]: {
+        label: 'Playtest',
+        nodeTemplate: {
+            start: { label: 'Start', icon: '▶', className: 'variant-start' },
+            dialogue: { label: 'Scene', icon: '🎬', className: 'variant-dialogue' },
+            choice: { label: 'Decision', icon: '🎮', className: 'variant-choice' },
+            condition: { label: 'Check', icon: '🎯', className: 'variant-condition' },
+            merge: { label: 'Join', icon: '🔁', className: 'variant-merge' },
+            ending: { label: 'Outcome', icon: '🏆', className: 'variant-ending' }
+        },
+        edgeStyleClass: 'edge-style-playtest',
+        defaultFilters: { showSecondaryEdges: false, focusCriticalPath: false, highlightFullDownstream: true }
+    }
 };
 
 function normalizeStorageToken(value) {
@@ -95,7 +145,8 @@ function normalizeEditorUiState(rawState) {
 
     return {
         collapsedById,
-        focusCriticalPath: Boolean(rawState?.focusCriticalPath)
+        focusCriticalPath: Boolean(rawState?.focusCriticalPath),
+        canvasViewMode: VIEW_MODE_ORDER.includes(rawState?.canvasViewMode) ? rawState.canvasViewMode : VIEW_MODES.AUTHOR
     };
 }
 
@@ -106,7 +157,7 @@ function getStoryEditorUiState() {
         return normalizeEditorUiState(parsed);
     } catch (error) {
         console.warn('Failed to parse editor UI state', error);
-        return { collapsedById: {}, focusCriticalPath: false };
+        return { collapsedById: {}, focusCriticalPath: false, canvasViewMode: VIEW_MODES.AUTHOR };
     }
 }
 
@@ -344,10 +395,46 @@ function collectCriticalPathNodes(passages) {
     return critical;
 }
 
-function getRenderedGraphState(passages) {
+function buildCanonicalGraphModel(passages) {
+    const safePassages = passages || {};
+    const incomingCounts = getIncomingCounts(safePassages);
+    const { edges, layerById } = collectEdges(safePassages);
+    const nodes = Object.keys(safePassages).map(id => {
+        const passage = safePassages[id];
+        return {
+            id,
+            passage,
+            incomingCount: incomingCounts[id] || 0,
+            variantId: inferNodeVariant(id, passage, incomingCounts[id] || 0),
+            risks: getNodeRisks(id, passage)
+        };
+    });
+    return {
+        nodes,
+        nodesById: new Map(nodes.map(node => [node.id, node])),
+        edges,
+        layerById
+    };
+}
+
+function getActiveViewMode() {
+    const mode = editorUiState.canvasViewMode;
+    return VIEW_MODE_ORDER.includes(mode) ? mode : VIEW_MODES.AUTHOR;
+}
+
+function getModePreset(mode = getActiveViewMode()) {
+    return VIEW_MODE_PRESETS[mode] || VIEW_MODE_PRESETS[VIEW_MODES.AUTHOR];
+}
+
+function getNodeTemplate(variantId, mode = getActiveViewMode()) {
+    const preset = getModePreset(mode);
+    return preset.nodeTemplate[variantId] || preset.nodeTemplate.dialogue || NODE_VARIANTS.dialogue;
+}
+
+function getRenderedGraphState(passages, graphModel = buildCanonicalGraphModel(passages)) {
     const hiddenNodes = collectCollapsedDescendants(passages, editorUiState.collapsedById);
     const visibleNodes = new Set(Object.keys(passages).filter(id => !hiddenNodes.has(id)));
-    const { edges } = collectEdges(passages);
+    const edges = graphModel.edges;
     const adjacency = new Map(Object.keys(passages).map(id => [id, []]));
     edges.forEach(edge => adjacency.get(edge.from).push(edge));
 
@@ -452,15 +539,16 @@ function renderInspectorMeta(nodeId, passage) {
     `;
 }
 
-function refreshNodeCard(nodeId) {
+function refreshNodeCard(nodeId, graphModel = null) {
     const node = document.querySelector(`.node[data-id="${nodeId}"]`);
     const passage = window.storyData.passages[nodeId];
     if (!node || !passage) return;
 
-    const incomingCounts = getIncomingCounts(window.storyData.passages || {});
-    const variantId = inferNodeVariant(nodeId, passage, incomingCounts[nodeId] || 0);
-    const variant = NODE_VARIANTS[variantId];
-    const risks = getNodeRisks(nodeId, passage);
+    const resolvedGraphModel = graphModel || buildCanonicalGraphModel(window.storyData.passages || {});
+    const modelNode = resolvedGraphModel.nodesById.get(nodeId);
+    const variantId = modelNode?.variantId || inferNodeVariant(nodeId, passage, 0);
+    const variant = getNodeTemplate(variantId);
+    const risks = modelNode?.risks || getNodeRisks(nodeId, passage);
     const text = (passage.text || '').trim();
     const riskBadges = Object.entries(risks)
         .filter(([, active]) => active)
@@ -471,7 +559,7 @@ function refreshNodeCard(nodeId) {
         .join('');
 
     const isCollapsed = editorUiState.collapsedById[nodeId] === true;
-    node.className = `node ${variant.className}`;
+    node.className = `node ${variant.className} node-mode-${getActiveViewMode()}`;
     if (selectedNode === node) node.classList.add('selected');
     if (isCollapsed) node.classList.add('node-collapsed');
     node.innerHTML = `
@@ -765,6 +853,14 @@ function initEditor() {
     if (focusStartBtn) focusStartBtn.onclick = () => jumpToPassage('start');
     const focusStartClusterBtn = document.getElementById('focus-start-cluster');
     if (focusStartClusterBtn) focusStartClusterBtn.onclick = () => focusStartCluster();
+    const viewModeSelector = document.getElementById('canvas-view-mode');
+    if (viewModeSelector) {
+        viewModeSelector.value = getActiveViewMode();
+        viewModeSelector.onchange = (event) => {
+            applyCanvasViewMode(event.target.value);
+        };
+    }
+
     const toggleSecondaryEdges = document.getElementById('toggle-secondary-edges');
     if (toggleSecondaryEdges) {
         toggleSecondaryEdges.checked = showSecondaryEdges;
@@ -801,6 +897,7 @@ function initEditor() {
         };
     }
 
+    applyCanvasViewMode(getActiveViewMode(), { persist: false });
     updateZoomIndicator();
     validateStory({ showModalReport: false });
 
@@ -1129,8 +1226,15 @@ function drawConnections() {
     </defs>`;
 
     const passages = window.storyData.passages || {};
-    const { visibleNodes, renderedEdges, criticalNodes } = getRenderedGraphState(passages);
-    const { layerById } = getPrimaryGraphLayers(passages);
+    const graphModel = buildCanonicalGraphModel(passages);
+    const { visibleNodes, renderedEdges, criticalNodes } = getRenderedGraphState(passages, graphModel);
+    const { layerById } = graphModel;
+    const activeMode = getActiveViewMode();
+    const preset = getModePreset(activeMode);
+    const graphContainer = document.getElementById('graph-container');
+    if (graphContainer) {
+        graphContainer.dataset.viewMode = activeMode;
+    }
     const nodeElements = new Map();
     document.querySelectorAll('.node').forEach(node => nodeElements.set(node.dataset.id, node));
     const bundleLayout = getBundleLayout(renderedEdges, nodeElements, layerById);
@@ -1157,7 +1261,7 @@ function drawConnections() {
 
         const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
         path.setAttribute('d', pathD);
-        path.classList.add('connection-path', `edge-${edge.type}`);
+        path.classList.add('connection-path', `edge-${edge.type}`, `edge-mode-${activeMode}`, preset.edgeStyleClass);
         if (!edge.isPrimary) path.classList.add('edge-secondary');
         if (edge.rerouted) path.classList.add('edge-rerouted');
         if (criticalNodes && (!criticalNodes.has(edge.from) || !criticalNodes.has(edge.to))) {
@@ -1236,7 +1340,7 @@ function drawConnections() {
         const shortLabel = truncateEdgeLabel(fullLabelText, 28);
 
         const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-        text.classList.add('connection-label', `edge-${edge.type}`);
+        text.classList.add('connection-label', `edge-${edge.type}`, `edge-mode-${activeMode}`, preset.edgeStyleClass);
         if (!edge.isPrimary) text.classList.add('edge-secondary');
         if (criticalNodes && (!criticalNodes.has(edge.from) || !criticalNodes.has(edge.to))) {
             text.classList.add('edge-dimmed');
@@ -1272,7 +1376,7 @@ function drawConnections() {
             return;
         }
 
-        refreshNodeCard(nodeId);
+        refreshNodeCard(nodeId, graphModel);
         node.classList.toggle('cycle-node', highlightedCycleNodes.has(nodeId));
         node.classList.toggle('unreachable-node', highlightedUnreachableNodes.has(nodeId));
         node.classList.toggle('validation-node-error', highlightedErrorNodes.has(nodeId));
@@ -1284,6 +1388,35 @@ function drawConnections() {
 
     const searchInput = document.getElementById('passage-search');
     if (searchInput) applyPassageSearch(searchInput.value || '');
+}
+
+function applyCanvasViewMode(mode, { persist = true } = {}) {
+    if (!VIEW_MODE_ORDER.includes(mode)) return;
+    editorUiState.canvasViewMode = mode;
+    const preset = getModePreset(mode);
+    showSecondaryEdges = preset.defaultFilters.showSecondaryEdges;
+    editorUiState.focusCriticalPath = preset.defaultFilters.focusCriticalPath;
+    highlightFullDownstream = preset.defaultFilters.highlightFullDownstream;
+
+    const selector = document.getElementById('canvas-view-mode');
+    if (selector) selector.value = mode;
+    const toggleSecondaryEdges = document.getElementById('toggle-secondary-edges');
+    if (toggleSecondaryEdges) toggleSecondaryEdges.checked = showSecondaryEdges;
+    const focusCriticalPathToggle = document.getElementById('focus-critical-path');
+    if (focusCriticalPathToggle) focusCriticalPathToggle.checked = editorUiState.focusCriticalPath;
+    const fullDownstreamToggle = document.getElementById('highlight-full-downstream');
+    if (fullDownstreamToggle) fullDownstreamToggle.checked = highlightFullDownstream;
+
+    refreshDownstreamHighlight();
+    if (persist) saveStoryEditorUiState();
+    drawConnections();
+}
+
+function cycleCanvasViewMode() {
+    const current = getActiveViewMode();
+    const currentIndex = VIEW_MODE_ORDER.indexOf(current);
+    const nextMode = VIEW_MODE_ORDER[(currentIndex + 1) % VIEW_MODE_ORDER.length];
+    applyCanvasViewMode(nextMode);
 }
 
 
@@ -2282,6 +2415,11 @@ document.addEventListener('keydown', e => {
     if (!isTypingContext && e.altKey && (e.key === 'e' || e.key === 'E')) {
         e.preventDefault();
         expandNodesInViewport();
+    }
+
+    if (!isTypingContext && e.altKey && (e.key === 'm' || e.key === 'M')) {
+        e.preventDefault();
+        cycleCanvasViewMode();
     }
 
     // Delete selected node
