@@ -369,14 +369,51 @@ const conditionEvaluator = (() => {
         throw new Error(`Unsupported AST node type: ${node.type}`);
     }
 
-    function evaluate(condition, scope) {
+    function parseCondition(condition) {
         const tokens = tokenize(condition);
-        const ast = parse(tokens);
+        return parse(tokens);
+    }
+
+    function evaluate(condition, scope) {
+        const ast = parseCondition(condition);
         return Boolean(evaluateNode(ast, scope));
     }
 
-    return { evaluate };
+    return { evaluate, parseCondition };
 })();
+
+const effectParser = (() => {
+    function parseEffect(effect) {
+        const raw = String(effect ?? '');
+        const operators = ['+=', '-=', '='];
+
+        for (const operator of operators) {
+            const index = raw.indexOf(operator);
+            if (index === -1) continue;
+
+            const path = raw.slice(0, index).trim();
+            const value = raw.slice(index + operator.length).trim();
+
+            if (!path) {
+                throw new Error('Effect is missing a variable path.');
+            }
+            if (!value) {
+                throw new Error('Effect is missing a value.');
+            }
+
+            return { path, operator, value };
+        }
+
+        throw new Error('Effect must use one of: =, +=, -=');
+    }
+
+    return { parseEffect };
+})();
+
+window.storyParsers = {
+    parseCondition: (condition) => conditionEvaluator.parseCondition(condition),
+    parseEffect: (effect) => effectParser.parseEffect(effect)
+};
 
 function evalCondition(cond) {
     try {

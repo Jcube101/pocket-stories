@@ -14,6 +14,12 @@ const MAX_HISTORY = 20;
 let highlightedCycleNodes = new Set();
 let highlightedCycleEdges = new Set();
 let highlightedUnreachableNodes = new Set();
+let highlightedErrorNodes = new Set();
+let highlightedErrorEdges = new Set();
+let highlightedWarningNodes = new Set();
+let highlightedWarningEdges = new Set();
+let highlightedInfoNodes = new Set();
+let highlightedInfoEdges = new Set();
 let editorEventsBound = false;
 
 function normalizeVariables(v = {}) {
@@ -459,6 +465,14 @@ function drawConnections() {
                 path.classList.add('cycle-edge');
             }
 
+            if (highlightedErrorEdges.has(connId)) {
+                path.classList.add('validation-edge-error');
+            } else if (highlightedWarningEdges.has(connId)) {
+                path.classList.add('validation-edge-warning');
+            } else if (highlightedInfoEdges.has(connId)) {
+                path.classList.add('validation-edge-info');
+            }
+
             // Right-click action menu for connection
             path.addEventListener('contextmenu', e => {
                 e.preventDefault();
@@ -520,10 +534,36 @@ function drawConnections() {
         const nodeId = node.dataset.id;
         node.classList.toggle('cycle-node', highlightedCycleNodes.has(nodeId));
         node.classList.toggle('unreachable-node', highlightedUnreachableNodes.has(nodeId));
+        node.classList.toggle('validation-node-error', highlightedErrorNodes.has(nodeId));
+        node.classList.toggle('validation-node-warning', highlightedWarningNodes.has(nodeId));
+        node.classList.toggle('validation-node-info', highlightedInfoNodes.has(nodeId));
     });
 
     const searchInput = document.getElementById('passage-search');
     if (searchInput) applyPassageSearch(searchInput.value || '');
+}
+
+function jumpToPassage(id) {
+    const node = document.querySelector(`.node[data-id="${id}"]`);
+    if (!node) return;
+
+    if (selectedNode) selectedNode.classList.remove('selected');
+    selectedNode = node;
+    node.classList.add('selected');
+
+    const x = parseFloat(node.style.left);
+    const y = parseFloat(node.style.top);
+    pan.x = Math.max(0, window.innerWidth / 2 - x * scale - 180);
+    pan.y = Math.max(0, window.innerHeight / 2 - y * scale - 120);
+    updateTransform();
+}
+
+function jumpToConnection(from, target, index) {
+    jumpToPassage(from);
+    const edge = document.querySelector(`.connection-path[data-from="${from}"][data-to="${target}"][data-index="${index}"]`);
+    if (!edge) return;
+    document.querySelectorAll('.connection-path.selected').forEach(p => p.classList.remove('selected'));
+    edge.classList.add('selected');
 }
 
 function fitToNodes() {
@@ -561,18 +601,7 @@ function renderPassageList() {
         item.type = 'button';
         item.className = 'passage-item';
         item.textContent = id;
-        item.onclick = () => {
-            const node = document.querySelector(`.node[data-id="${id}"]`);
-            if (!node) return;
-            if (selectedNode) selectedNode.classList.remove('selected');
-            selectedNode = node;
-            node.classList.add('selected');
-            const x = parseFloat(node.style.left);
-            const y = parseFloat(node.style.top);
-            pan.x = Math.max(0, window.innerWidth / 2 - x * scale - 180);
-            pan.y = Math.max(0, window.innerHeight / 2 - y * scale - 120);
-            updateTransform();
-        };
+        item.onclick = () => jumpToPassage(id);
         list.appendChild(item);
     });
 }
@@ -845,17 +874,15 @@ function validateStory() {
     const issues = [];
     const passages = window.storyData.passages;
     const ids = Object.keys(passages);
+    const storyParsers = window.storyParsers || {};
+
+    function addIssue(severity, message, context = {}) {
+        issues.push({ severity, message, ...context });
+    }
 
     // Missing start
     if (!passages.start) {
-        issues.push("Missing 'start' passage");
-    }
-
-    // Duplicate IDs
-    const seen = new Set();
-    for (const id of ids) {
-        if (seen.has(id)) issues.push(`Duplicate passage ID: "${id}"`);
-        seen.add(id);
+        addIssue('error', "Missing 'start' passage");
     }
 
     // Broken links + effect validation
@@ -863,8 +890,42 @@ function validateStory() {
         const p = passages[id];
         if (p.choices) {
             p.choices.forEach((ch, idx) => {
+                const edgeContext = { from: id, target: ch.target, index: idx };
+
+                if (typeof ch.text !== 'string' || ch.text.trim() === '') {
+                    addIssue('error', `Missing choice text: "${id}" choice #${idx + 1}`, edgeContext);
+                }
+
+                if (typeof ch.target !== 'string' || ch.target.trim() === '') {
+                    addIssue('error', `Missing choice target: "${id}" choice #${idx + 1}`, edgeContext);
+                }
+
                 if (!passages[ch.target]) {
-                    issues.push(`Broken link: "${id}" choice #${idx + 1} → "${ch.target}" (missing)`);
+                    addIssue('error', `Broken link: "${id}" choice #${idx + 1} → "${ch.target}" (missing)`, edgeContext);
+                }
+
+                if (ch.condition) {
+                    if (typeof storyParsers.parseCondition === 'function') {
+                        try {
+                            storyParsers.parseCondition(ch.condition);
+                        } catch (err) {
+                            addIssue('error', `Invalid condition in "${id}" choice #${idx + 1}: ${err.message}`, edgeContext);
+                        }
+                    } else {
+                        addIssue('warning', `Cannot parse-check condition in "${id}" choice #${idx + 1}: runtime parser unavailable.`, edgeContext);
+                    }
+                }
+
+                if (ch.effect) {
+                    if (typeof storyParsers.parseEffect === 'function') {
+                        try {
+                            storyParsers.parseEffect(ch.effect);
+                        } catch (err) {
+                            addIssue('error', `Invalid effect in "${id}" choice #${idx + 1}: ${err.message}`, edgeContext);
+                        }
+                    } else {
+                        addIssue('warning', `Cannot parse-check effect in "${id}" choice #${idx + 1}: runtime parser unavailable.`, edgeContext);
+                    }
                 }
 
                 if (ch.effect) {
@@ -899,7 +960,7 @@ function validateStory() {
     const unreachable = new Set();
     for (const id of ids) {
         if (id !== 'start' && !reachable.has(id)) {
-            issues.push(`Unreachable passage: "${id}"`);
+            addIssue('warning', `Unreachable passage: "${id}"`, { nodeId: id });
             unreachable.add(id);
         }
     }
@@ -907,7 +968,7 @@ function validateStory() {
     const cycles = findCycles(passages);
     if (cycles.length > 0) {
         cycles.forEach((cycle, idx) => {
-            issues.push(`Cycle ${idx + 1}: ${cycle.join(' → ')} → ${cycle[0]}`);
+            addIssue('info', `Cycle ${idx + 1}: ${cycle.join(' → ')} → ${cycle[0]}`, { nodeId: cycle[0] });
         });
     }
 
@@ -924,6 +985,37 @@ function validateStory() {
     highlightedCycleNodes = cycleNodes;
     highlightedCycleEdges = cycleEdges;
     highlightedUnreachableNodes = unreachable;
+
+    highlightedErrorNodes = new Set();
+    highlightedErrorEdges = new Set();
+    highlightedWarningNodes = new Set();
+    highlightedWarningEdges = new Set();
+    highlightedInfoNodes = new Set();
+    highlightedInfoEdges = new Set();
+
+    issues.forEach(issue => {
+        const edgeId = (issue.from && issue.target != null && issue.index != null)
+            ? `${issue.from}-to-${issue.target}-${issue.index}`
+            : null;
+
+        if (issue.severity === 'error') {
+            if (issue.nodeId) highlightedErrorNodes.add(issue.nodeId);
+            if (issue.from) highlightedErrorNodes.add(issue.from);
+            if (issue.target && passages[issue.target]) highlightedErrorNodes.add(issue.target);
+            if (edgeId) highlightedErrorEdges.add(edgeId);
+        } else if (issue.severity === 'warning') {
+            if (issue.nodeId) highlightedWarningNodes.add(issue.nodeId);
+            if (issue.from) highlightedWarningNodes.add(issue.from);
+            if (issue.target && passages[issue.target]) highlightedWarningNodes.add(issue.target);
+            if (edgeId) highlightedWarningEdges.add(edgeId);
+        } else {
+            if (issue.nodeId) highlightedInfoNodes.add(issue.nodeId);
+            if (issue.from) highlightedInfoNodes.add(issue.from);
+            if (issue.target && passages[issue.target]) highlightedInfoNodes.add(issue.target);
+            if (edgeId) highlightedInfoEdges.add(edgeId);
+        }
+    });
+
     drawConnections();
 
     // Report
@@ -945,26 +1037,68 @@ function validateStory() {
         return;
     }
 
+    const grouped = {
+        error: issues.filter(issue => issue.severity === 'error'),
+        warning: issues.filter(issue => issue.severity === 'warning'),
+        info: issues.filter(issue => issue.severity === 'info')
+    };
+
     heading.style.color = '#ef4444';
     heading.textContent = `⚠ Validation issues found (${issues.length})`;
     summary.style.color = '#666';
-    summary.textContent = 'Fix these to ensure your story plays correctly:';
+    summary.textContent = `Errors: ${grouped.error.length}, warnings: ${grouped.warning.length}, info: ${grouped.info.length}`;
     report.appendChild(heading);
     report.appendChild(summary);
 
-    const list = document.createElement('ul');
-    list.style.textAlign = 'left';
-    list.style.margin = '1em 0';
-    list.style.paddingLeft = '1.5em';
-    list.style.lineHeight = '1.6';
+    [
+        { key: 'error', label: 'Errors', color: '#dc2626' },
+        { key: 'warning', label: 'Warnings', color: '#d97706' },
+        { key: 'info', label: 'Info', color: '#2563eb' }
+    ].forEach(section => {
+        const sectionIssues = grouped[section.key];
+        if (sectionIssues.length === 0) return;
 
-    issues.forEach(issue => {
-        const item = document.createElement('li');
-        item.textContent = issue;
-        list.appendChild(item);
+        const subheading = document.createElement('h3');
+        subheading.textContent = `${section.label} (${sectionIssues.length})`;
+        subheading.style.color = section.color;
+        subheading.style.marginTop = '1em';
+        report.appendChild(subheading);
+
+        const list = document.createElement('ul');
+        list.style.textAlign = 'left';
+        list.style.margin = '0.5em 0 0';
+        list.style.paddingLeft = '1.5em';
+        list.style.lineHeight = '1.6';
+
+        sectionIssues.forEach(issue => {
+            const item = document.createElement('li');
+            const label = document.createElement('span');
+            label.textContent = issue.message;
+            item.appendChild(label);
+
+            if (issue.nodeId || issue.from) {
+                const jumpBtn = document.createElement('button');
+                jumpBtn.type = 'button';
+                jumpBtn.textContent = 'Jump';
+                jumpBtn.style.marginLeft = '0.6em';
+                jumpBtn.style.padding = '2px 8px';
+                jumpBtn.style.fontSize = '0.8em';
+                jumpBtn.onclick = () => {
+                    if (issue.from && issue.target != null && issue.index != null) {
+                        jumpToConnection(issue.from, issue.target, issue.index);
+                        return;
+                    }
+                    jumpToPassage(issue.nodeId || issue.from);
+                };
+                item.appendChild(jumpBtn);
+            }
+
+            list.appendChild(item);
+        });
+
+        report.appendChild(list);
     });
 
-    report.appendChild(list);
     showModal(report);
 }
 
