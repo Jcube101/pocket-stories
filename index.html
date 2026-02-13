@@ -69,11 +69,14 @@
 
                 <section class="sidebar-section">
                     <h2>Canvas Controls</h2>
-                    <div class="row-inline">
-                        <button id="zoom-in">+</button>
-                        <button id="zoom-out">−</button>
-                        <button id="zoom-fit">Fit</button>
-                        <button id="zoom-reset">100%</button>
+                    <div class="canvas-controls-grid">
+                        <button id="zoom-in" title="Zoom in">+</button>
+                        <button id="zoom-out" title="Zoom out">−</button>
+                        <button id="zoom-fit" title="Fit all nodes">Fit All</button>
+                        <button id="zoom-reset" title="Reset zoom and position">Reset</button>
+                        <button id="focus-start" title="Jump to start node">Start</button>
+                        <button id="focus-start-cluster" title="Focus start and first connected nodes">Start + Next</button>
+                        <div id="zoom-indicator" class="zoom-indicator" aria-live="polite">100%</div>
                     </div>
                 </section>
             </div>

@@ -166,19 +166,26 @@ function initEditor() {
 
     bindEditorEvents();
 
-    // Wheel zoom (screen-centered, no drift)
+    // Wheel zoom
     nodesContainer.onwheel = e => {
         e.preventDefault();
         const factor = e.deltaY < 0 ? 1.1 : 0.9;
         scale = Math.max(0.3, Math.min(scale * factor, 2));
         updateTransform();
+        updateZoomIndicator();
     };
 
-    // Zoom buttons
-    document.getElementById('zoom-in').onclick = () => { scale = Math.min(scale * 1.2, 2); updateTransform(); };
-    document.getElementById('zoom-out').onclick = () => { scale = Math.max(scale / 1.2, 0.3); updateTransform(); };
-    document.getElementById('zoom-reset').onclick = () => { scale = 1; pan = { x: 0, y: 0 }; updateTransform(); };
+    // Zoom and focus controls
+    document.getElementById('zoom-in').onclick = () => { scale = Math.min(scale * 1.2, 2); updateTransform(); updateZoomIndicator(); };
+    document.getElementById('zoom-out').onclick = () => { scale = Math.max(scale / 1.2, 0.3); updateTransform(); updateZoomIndicator(); };
+    document.getElementById('zoom-reset').onclick = () => { scale = 1; pan = { x: 0, y: 0 }; updateTransform(); updateZoomIndicator(); };
     document.getElementById('zoom-fit').onclick = fitToNodes;
+    const focusStartBtn = document.getElementById('focus-start');
+    if (focusStartBtn) focusStartBtn.onclick = () => jumpToPassage('start');
+    const focusStartClusterBtn = document.getElementById('focus-start-cluster');
+    if (focusStartClusterBtn) focusStartClusterBtn.onclick = () => focusStartCluster();
+
+    updateZoomIndicator();
 
     const wrapper = document.getElementById('canvas-wrapper');
     wrapper.ondblclick = e => {
@@ -230,14 +237,6 @@ function bindEditorEvents() {
         }
     });
 
-    nodesContainer.addEventListener('mousedown', e => {
-        if (e.target === nodesContainer || e.target === svgCanvas) {
-            isPanning = true;
-            panStart = { x: e.clientX - pan.x, y: e.clientY - pan.y };
-            e.preventDefault();
-        }
-    });
-
     wrapper.addEventListener('click', e => {
         if (e.target === wrapper || e.target === svgCanvas) {
             if (selectedNode) {
@@ -249,7 +248,7 @@ function bindEditorEvents() {
     });
 
     wrapper.addEventListener('mousedown', e => {
-        if (e.button === 1) {
+        if (e.button === 1 || (e.button === 0 && e.shiftKey && !e.target.closest('.node'))) {
             isPanning = true;
             panStart.x = e.clientX - pan.x;
             panStart.y = e.clientY - pan.y;
@@ -269,8 +268,8 @@ function bindEditorEvents() {
         updateTransform();
     });
 
-    document.addEventListener('mouseup', e => {
-        if (e.button === 1 && isPanning) {
+    document.addEventListener('mouseup', () => {
+        if (isPanning) {
             isPanning = false;
             wrapper.style.cursor = 'default';
         }
@@ -606,9 +605,63 @@ function jumpToPassage(id) {
 
     const x = parseFloat(node.style.left);
     const y = parseFloat(node.style.top);
-    pan.x = Math.max(0, window.innerWidth / 2 - x * scale - 180);
-    pan.y = Math.max(0, window.innerHeight / 2 - y * scale - 120);
+    pan.x = window.innerWidth / 2 - (x + 160) * scale;
+    pan.y = window.innerHeight / 2 - (y + 60) * scale;
     updateTransform();
+}
+
+function focusStartCluster() {
+    const start = window.storyData.passages.start;
+    if (!start) {
+        jumpToPassage('start');
+        return;
+    }
+
+    const ids = ['start', ...(start.choices || []).slice(0, 2).map(ch => ch.target)].filter(Boolean);
+    const nodes = ids
+        .map(id => document.querySelector(`.node[data-id="${id}"]`))
+        .filter(Boolean);
+
+    if (nodes.length === 0) return;
+
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    nodes.forEach(node => {
+        const x = parseFloat(node.style.left);
+        const y = parseFloat(node.style.top);
+        minX = Math.min(minX, x);
+        minY = Math.min(minY, y);
+        maxX = Math.max(maxX, x + node.offsetWidth);
+        maxY = Math.max(maxY, y + node.offsetHeight);
+    });
+
+    focusBounds(minX, minY, maxX, maxY, 120);
+}
+
+function updateZoomIndicator() {
+    const indicator = document.getElementById('zoom-indicator');
+    if (!indicator) return;
+    indicator.textContent = `${Math.round(scale * 100)}%`;
+}
+
+function focusBounds(minX, minY, maxX, maxY, padding = 160) {
+    const wrapper = document.getElementById('canvas-wrapper');
+    if (!wrapper) return;
+
+    const width = (maxX - minX) + padding * 2;
+    const height = (maxY - minY) + padding * 2;
+    const availableW = wrapper.clientWidth;
+    const availableH = wrapper.clientHeight;
+    scale = Math.max(0.3, Math.min(Math.min(availableW / width, availableH / height), 2));
+
+    const centerX = (minX + maxX) / 2;
+    const centerY = (minY + maxY) / 2;
+    pan.x = (availableW / 2) - (centerX * scale);
+    pan.y = (availableH / 2) - (centerY * scale);
+    updateTransform();
+    updateZoomIndicator();
 }
 
 function jumpToConnection(from, target, index) {
@@ -623,24 +676,20 @@ function fitToNodes() {
     const nodes = document.querySelectorAll('.node');
     if (nodes.length === 0) return;
 
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
     nodes.forEach(n => {
-        const r = n.getBoundingClientRect();
-        minX = Math.min(minX, r.left);
-        minY = Math.min(minY, r.top);
-        maxX = Math.max(maxX, r.right);
-        maxY = Math.max(maxY, r.bottom);
+        const x = parseFloat(n.style.left);
+        const y = parseFloat(n.style.top);
+        minX = Math.min(minX, x);
+        minY = Math.min(minY, y);
+        maxX = Math.max(maxX, x + n.offsetWidth);
+        maxY = Math.max(maxY, y + n.offsetHeight);
     });
 
-    const width = maxX - minX + 200;
-    const height = maxY - minY + 200;
-    const canvasW = window.innerWidth - 300;
-    const canvasH = window.innerHeight - 80;
-
-    scale = Math.min(canvasW / width, canvasH / height, 1);
-    pan.x = (canvasW - width * scale) / 2 + 150;
-    pan.y = (canvasH - height * scale) / 2;
-    updateTransform();
+    focusBounds(minX, minY, maxX, maxY);
 }
 
 function renderPassageList() {
@@ -684,27 +733,39 @@ function applyPassageSearch(rawTerm) {
 
 function renderVariables() {
     const container = document.getElementById('variables');
+    if (!container) return;
     container.innerHTML = '';
 
     Object.keys(variables).forEach(cat => {
+        const group = document.createElement('section');
+        group.className = 'variable-group';
+
         const h3 = document.createElement('h3');
         h3.textContent = cat.charAt(0).toUpperCase() + cat.slice(1);
         h3.title = getCategoryTooltip(cat);
-        container.appendChild(h3);
+        group.appendChild(h3);
 
-        Object.keys(variables[cat]).forEach(key => {
+        const keys = Object.keys(variables[cat]);
+        if (keys.length === 0) {
+            const empty = document.createElement('p');
+            empty.className = 'variable-empty';
+            empty.textContent = 'No variables yet.';
+            group.appendChild(empty);
+        }
+
+        keys.forEach(key => {
             const row = document.createElement('div');
             row.className = 'variable-row';
 
-            const label = document.createElement('strong');
+            const label = document.createElement('label');
+            label.className = 'variable-label';
             label.textContent = key;
-            label.style.flex = '1';
             row.appendChild(label);
 
             const input = document.createElement('input');
+            input.className = 'variable-input';
             input.type = cat === 'relationships' ? 'number' : 'text';
             input.value = variables[cat][key];
-            input.style.width = '80px';
             input.onchange = () => {
                 let val = input.value;
                 if (cat === 'relationships') val = Number(val) || 0;
@@ -716,6 +777,7 @@ function renderVariables() {
             row.appendChild(input);
 
             const removeBtn = document.createElement('button');
+            removeBtn.type = 'button';
             removeBtn.textContent = 'Remove';
             removeBtn.className = 'variable-remove';
             removeBtn.onclick = () => {
@@ -726,8 +788,10 @@ function renderVariables() {
             };
             row.appendChild(removeBtn);
 
-            container.appendChild(row);
+            group.appendChild(row);
         });
+
+        container.appendChild(group);
     });
 }
 
