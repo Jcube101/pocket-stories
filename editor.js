@@ -16,6 +16,61 @@ let highlightedCycleEdges = new Set();
 let highlightedUnreachableNodes = new Set();
 let editorEventsBound = false;
 
+function normalizeStorageToken(value) {
+    return String(value || '')
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9_-]+/g, '_')
+        .replace(/^_+|_+$/g, '');
+}
+
+function getStoryLayoutStorageKey() {
+    const metadata = (window.storyData && typeof window.storyData.metadata === 'object')
+        ? window.storyData.metadata
+        : {};
+    const identityToken = normalizeStorageToken(metadata.storyIdentity);
+    const titleToken = normalizeStorageToken(window.storyData && window.storyData.title);
+    const primaryToken = identityToken || titleToken || 'untitled';
+
+    return {
+        newKey: `pocketstories_layout_${primaryToken}`,
+        oldKey: `pocketstories_layout_${window.storyData?.title || 'untitled'}`
+    };
+}
+
+function getStoryLayout() {
+    const { newKey, oldKey } = getStoryLayoutStorageKey();
+    const hasNew = localStorage.getItem(newKey) !== null;
+    const oldLayout = localStorage.getItem(oldKey);
+
+    if (!hasNew && oldLayout !== null) {
+        localStorage.setItem(newKey, oldLayout);
+    }
+
+    try {
+        return JSON.parse(localStorage.getItem(newKey) || '{}');
+    } catch (err) {
+        console.warn('Failed to parse saved layout from localStorage', err);
+        return {};
+    }
+}
+
+function saveStoryLayout(layout) {
+    const { newKey } = getStoryLayoutStorageKey();
+    localStorage.setItem(newKey, JSON.stringify(layout));
+}
+
+async function hashText(text) {
+    if (!window.crypto?.subtle || typeof TextEncoder === 'undefined') {
+        return null;
+    }
+    const bytes = new TextEncoder().encode(text);
+    const digest = await window.crypto.subtle.digest('SHA-256', bytes);
+    return Array.from(new Uint8Array(digest))
+        .map(b => b.toString(16).padStart(2, '0'))
+        .join('');
+}
+
 function normalizeVariables(v = {}) {
     return {
         inventory: v.inventory || {},
@@ -237,8 +292,7 @@ function createNode(id, text, index) {
         posY = passage.position.y;
     } else {
         // Fallback to localStorage
-        const storyKey = 'pocketstories_layout_' + (window.storyData.title || 'untitled');
-        const layout = JSON.parse(localStorage.getItem(storyKey) || '{}');
+        const layout = getStoryLayout();
         const saved = layout[id];
         if (saved) {
             posX = saved.x;
@@ -307,10 +361,9 @@ function createNode(id, text, index) {
             window.storyData.passages[id].position.y = newY;
 
             // Fixed: save current position to localStorage
-            const storyKey = 'pocketstories_layout_' + (window.storyData.title || 'untitled');
-            const layout = JSON.parse(localStorage.getItem(storyKey) || '{}');
+            const layout = getStoryLayout();
             layout[id] = { x: newX, y: newY };
-            localStorage.setItem(storyKey, JSON.stringify(layout));
+            saveStoryLayout(layout);
 
             drawConnections();
             saveState(); // for undo/redo
@@ -1104,13 +1157,14 @@ if (loadStoryInput) {
         const file = e.target.files[0];
         if (!file) return;
         const reader = new FileReader();
-        reader.onload = ev => {
+        reader.onload = async ev => {
             try {
                 const raw = ev.target.result;
                 const isJson = file.name.toLowerCase().endsWith('.json');
                 const parsed = isJson ? JSON.parse(raw) : jsyaml.load(raw);
+                const importHash = await hashText(raw);
                 if (typeof window.loadStoryData === 'function') {
-                    window.loadStoryData(parsed, file.name);
+                    window.loadStoryData(parsed, file.name, { importHash });
                 } else {
                     const validator = window.validateAndNormalizeStory;
                     const result = typeof validator === 'function'
@@ -1122,6 +1176,13 @@ if (loadStoryInput) {
                     }
 
                     window.storyData = result.data;
+                    if (!window.storyData.metadata || typeof window.storyData.metadata !== 'object') {
+                        window.storyData.metadata = {};
+                    }
+                    if (importHash) {
+                        window.storyData.metadata.importHash = importHash;
+                        window.storyData.metadata.storyIdentity = `import:${importHash}`;
+                    }
                     variables = JSON.parse(JSON.stringify(normalizeVariables(window.storyData.variables)));
                     window.storyData.variables = JSON.parse(JSON.stringify(variables));
                     initEditor();
