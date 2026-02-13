@@ -495,7 +495,18 @@ function drawConnections() {
                 const cond = prompt('Condition (optional)', ch.condition || '');
                 if (cond !== null) ch.condition = cond || undefined;
                 const eff = prompt('Effect (optional)', ch.effect || '');
-                if (eff !== null) ch.effect = eff || undefined;
+                if (eff !== null) {
+                    const nextEffect = eff || undefined;
+                    if (nextEffect && typeof window.parseStoryEffect === 'function') {
+                        const parsedEffect = window.parseStoryEffect(nextEffect);
+                        if (!parsedEffect.ok) {
+                            console.error('[EffectParser] Invalid effect:', nextEffect, '-', parsedEffect.error);
+                            alert(`Invalid effect: ${parsedEffect.error}`);
+                            return;
+                        }
+                    }
+                    ch.effect = nextEffect;
+                }
                 drawConnections();
                 saveState();
             });
@@ -874,7 +885,7 @@ function validateStory() {
         addIssue('error', "Missing 'start' passage");
     }
 
-    // Broken links
+    // Broken links + effect validation
     for (const id of ids) {
         const p = passages[id];
         if (p.choices) {
@@ -914,6 +925,17 @@ function validateStory() {
                         }
                     } else {
                         addIssue('warning', `Cannot parse-check effect in "${id}" choice #${idx + 1}: runtime parser unavailable.`, edgeContext);
+                    }
+                }
+
+                if (ch.effect) {
+                    if (typeof window.parseStoryEffect !== 'function') {
+                        issues.push('Effect validator unavailable. Could not validate effect syntax.');
+                    } else {
+                        const parsedEffect = window.parseStoryEffect(ch.effect);
+                        if (!parsedEffect.ok) {
+                            issues.push(`Invalid effect: "${id}" choice #${idx + 1} (${parsedEffect.error})`);
+                        }
                     }
                 }
             });

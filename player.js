@@ -437,32 +437,40 @@ function evalCondition(cond) {
     }
 }
 
-function parsePrimitiveValue(raw) {
-    const v = raw.trim();
-    if (v === 'true') return true;
-    if (v === 'false') return false;
-    const n = Number(v);
-    if (!Number.isNaN(n) && v !== '') return n;
-    return v;
-}
-
 function applyEffect(effect) {
-    try {
-        const parsed = effectParser.parseEffect(effect);
+    const parser = window.parseStoryEffect;
+    if (typeof parser !== 'function') {
+        console.error('[EffectParser] parser unavailable.', effect);
+        if (typeof window.setStoryStatus === 'function') {
+            window.setStoryStatus('Effect parser unavailable. Story effect was not applied.', 'error');
+        }
+        return;
+    }
 
-        if (parsed.operator === '+=') {
+    const result = parser(effect);
+    if (!result.ok) {
+        console.error('[EffectParser] Invalid effect:', effect, '-', result.error);
+        if (typeof window.setStoryStatus === 'function') {
+            window.setStoryStatus(`Invalid effect ignored: ${result.error}`, 'error');
+        }
+        return;
+    }
+
+    try {
+        const parsed = result.effect;
+        if (parsed.root === 'relationships') {
             const current = Number(getNested(variablesState, parsed.path) || 0);
-            setNested(variablesState, parsed.path, current + Number(parsed.value));
+            const next = parsed.operator === '+=' ? current + parsed.value : current - parsed.value;
+            setNested(variablesState, parsed.path, next);
             return;
         }
-        if (parsed.operator === '-=') {
-            const current = Number(getNested(variablesState, parsed.path) || 0);
-            setNested(variablesState, parsed.path, current - Number(parsed.value));
-            return;
-        }
-        setNested(variablesState, parsed.path, parsePrimitiveValue(parsed.value));
+
+        setNested(variablesState, parsed.path, parsed.value);
     } catch (e) {
-        console.error("Effect error", effect, e);
+        console.error('[EffectParser] Failed applying effect:', effect, e);
+        if (typeof window.setStoryStatus === 'function') {
+            window.setStoryStatus('Effect application failed. See console for details.', 'error');
+        }
     }
 }
 
