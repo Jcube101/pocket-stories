@@ -11,6 +11,7 @@ export default function App() {
   const [mode, setMode] = useState<'editor' | 'player'>('editor');
   const [story, setStory] = useState<StoryData | null>(null);
   const [activeStoryId, setActiveStoryId] = useState<string>('forest_adventure');
+  const [pendingStoryId, setPendingStoryId] = useState<string>('forest_adventure');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<{ message: string; type: string }>({ message: 'Loading story...', type: 'info' });
@@ -41,8 +42,14 @@ export default function App() {
 
   const onLoadStoryByPath = async (path: string, label = path) => {
     const id = path.split('/').pop()?.replace('.yaml', '') ?? activeStoryId;
+    setPendingStoryId(id);
     await loadStory(id);
     setStatus({ message: `Loaded: ${label}`, type: 'success' });
+  };
+
+  const onLoadSelectedStory = async () => {
+    if (!pendingStoryId || pendingStoryId === activeStoryId) return;
+    await loadStory(pendingStoryId);
   };
 
   const topStatus = useMemo(() => <p className={`story-status ${status.type}`}>{status.message}</p>, [status]);
@@ -58,7 +65,13 @@ export default function App() {
       </header>
 
       <main className="main-content">
-        <StoryList stories={stories} activeStoryId={activeStoryId} onSelect={loadStory} />
+        <StoryList
+          stories={stories}
+          activeStoryId={activeStoryId}
+          pendingStoryId={pendingStoryId}
+          onSelect={setPendingStoryId}
+          onLoadSelected={onLoadSelectedStory}
+        />
         {topStatus}
         {mode === 'editor' ? (
           <StoryEditor story={story} setStoryStatus={setStoryStatus} onLoadStoryByPath={onLoadStoryByPath} />
