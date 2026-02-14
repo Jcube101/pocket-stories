@@ -2022,31 +2022,145 @@ function ensureFallbackEndingPassage() {
     return id;
 }
 
-function applyAutofix(issue) {
+function normalizeChoiceExpression(expression) {
+    return String(expression ?? '')
+        .replace(/\s+/g, ' ')
+        .replace(/\s*([()])\s*/g, '$1')
+        .replace(/\s*(\|\||&&|==|!=|<=|>=|<|>)\s*/g, ' $1 ')
+        .replace(/\s*(\+=|-=|=)\s*/g, ' $1 ')
+        .trim();
+}
+
+function applyAutofixBatch(issues) {
+    let appliedCount = 0;
+    (issues || []).forEach(issue => {
+        if (applyAutofix(issue, { skipValidation: true })) appliedCount += 1;
+    });
+
+    if (appliedCount > 0) {
+        saveState();
+        validateStory({ showModalReport: false });
+        drawConnections();
+    }
+
+    return appliedCount;
+}
+
+function applyAutofix(issue, options = {}) {
     if (!issue?.autofix) return;
-    const fallbackId = ensureFallbackEndingPassage();
+    let changed = false;
+    const passages = window.storyData.passages;
+    let fallbackId = null;
+    const getFallbackId = () => {
+        if (!fallbackId) fallbackId = ensureFallbackEndingPassage();
+        return fallbackId;
+    };
+
+    if (issue.autofix.type === 'add-missing-start') {
+        if (!passages.start) {
+            const firstPassageId = Object.keys(passages).find(id => id !== 'start' && !String(id).startsWith('fallback_ending') && passages[id]);
+            passages.start = {
+                text: 'Auto-created start passage by diagnostics autofix.\n',
+                choices: firstPassageId ? [{ text: 'Begin', target: firstPassageId }] : [{ text: 'Continue', target: getFallbackId() }]
+            };
+            createNode('start', passages.start.text.trim(), 0);
+            renderPassageList();
+            changed = true;
+        }
+    }
 
     if (issue.autofix.type === 'connect-no-exit') {
         const nodeId = issue.autofix.nodeId;
-        const passage = window.storyData.passages[nodeId];
-        if (!passage) return;
+        const passage = passages[nodeId];
+        if (!passage) return false;
         if (!Array.isArray(passage.choices)) passage.choices = [];
-        const exists = passage.choices.some(choice => choice.target === fallbackId);
+        const targetId = getFallbackId();
+        const exists = passage.choices.some(choice => choice.target === targetId);
         if (!exists) {
-            passage.choices.push({ text: 'Continue to fallback ending', target: fallbackId });
+            passage.choices.push({ text: 'Continue to fallback ending', target: targetId });
+            changed = true;
         }
     }
 
     if (issue.autofix.type === 'repair-dangling-edge') {
-        const source = window.storyData.passages[issue.from];
-        if (!source || !source.choices || issue.index == null) return;
+        const source = passages[issue.from];
+        if (!source || !source.choices || issue.index == null) return false;
         const choice = source.choices[issue.index];
-        if (choice) choice.target = fallbackId;
+        const targetId = getFallbackId();
+        if (choice && choice.target !== targetId) {
+            choice.target = targetId;
+            changed = true;
+        }
     }
+
+    if (issue.autofix.type === 'connect-unreachable-node') {
+        const nodeId = issue.autofix.nodeId;
+        const start = passages.start;
+        if (start && passages[nodeId] && nodeId !== 'start') {
+            if (!Array.isArray(start.choices)) start.choices = [];
+            const exists = start.choices.some(choice => choice.target === nodeId);
+            if (!exists) {
+                start.choices.push({ text: `Reach ${nodeId}`, target: nodeId });
+                changed = true;
+            }
+        }
+    }
+
+    if (issue.autofix.type === 'normalize-choice-text') {
+        const source = passages[issue.from];
+        const choice = source?.choices?.[issue.index];
+        if (choice && (typeof choice.text !== 'string' || choice.text.trim() === '')) {
+            choice.text = 'Continue';
+            changed = true;
+        }
+    }
+
+    if (issue.autofix.type === 'normalize-choice-target') {
+        const source = passages[issue.from];
+        const choice = source?.choices?.[issue.index];
+        if (!choice) return false;
+        const normalizedTarget = typeof choice.target === 'string' ? choice.target.trim() : '';
+        if (!normalizedTarget) {
+            choice.target = getFallbackId();
+            changed = true;
+        } else if (choice.target !== normalizedTarget) {
+            choice.target = normalizedTarget;
+            changed = true;
+        }
+    }
+
+    if (issue.autofix.type === 'normalize-choice-condition') {
+        const source = passages[issue.from];
+        const choice = source?.choices?.[issue.index];
+        if (choice && choice.condition != null) {
+            const normalized = normalizeChoiceExpression(choice.condition);
+            if (normalized && normalized !== choice.condition) {
+                choice.condition = normalized;
+                changed = true;
+            }
+        }
+    }
+
+    if (issue.autofix.type === 'normalize-choice-effect') {
+        const source = passages[issue.from];
+        const choice = source?.choices?.[issue.index];
+        if (choice && choice.effect != null) {
+            const normalized = normalizeChoiceExpression(choice.effect);
+            if (normalized && normalized !== choice.effect) {
+                choice.effect = normalized;
+                changed = true;
+            }
+        }
+    }
+
+    if (!changed) return false;
+
+    if (options.skipValidation) return true;
 
     saveState();
     validateStory({ showModalReport: false });
     drawConnections();
+    return true;
 }
 
 function renderDiagnosticsPanel() {
@@ -2066,6 +2180,27 @@ function renderDiagnosticsPanel() {
     }
 
     panel.innerHTML = '';
+
+    const safeWarnings = issues.filter(issue => issue.severity === 'warning' && issue.autofix?.safe === true);
+    if (safeWarnings.length > 0) {
+        const safeRow = document.createElement('div');
+        safeRow.className = 'diagnostic-row';
+        const safeActions = document.createElement('div');
+        safeActions.className = 'diagnostic-actions';
+
+        const autofixAllBtn = document.createElement('button');
+        autofixAllBtn.type = 'button';
+        autofixAllBtn.className = 'autofix-btn';
+        autofixAllBtn.textContent = `Autofix all safe warnings (${safeWarnings.length})`;
+        autofixAllBtn.onclick = () => {
+            applyAutofixBatch(safeWarnings);
+        };
+
+        safeActions.appendChild(autofixAllBtn);
+        safeRow.appendChild(safeActions);
+        panel.appendChild(safeRow);
+    }
+
     issues.forEach((issue, idx) => {
         const row = document.createElement('div');
         row.className = `diagnostic-row severity-${issue.severity}`;
@@ -2159,7 +2294,11 @@ function validateStory(options = {}) {
         issues.push({ severity, message, ...context });
     }
 
-    if (!passages.start) addIssue('error', "Missing 'start' passage");
+    if (!passages.start) {
+        addIssue('error', "Missing 'start' passage", {
+            autofix: { type: 'add-missing-start', label: 'Autofix: add start passage' }
+        });
+    }
 
     for (const id of ids) {
         const p = passages[id];
@@ -2167,16 +2306,25 @@ function validateStory(options = {}) {
         p.choices.forEach((ch, idx) => {
             const edgeContext = { from: id, target: ch.target, index: idx };
             if (typeof ch.text !== 'string' || ch.text.trim() === '') {
-                addIssue('error', `Missing choice text: "${id}" choice #${idx + 1}`, edgeContext);
+                addIssue('error', `Missing choice text: "${id}" choice #${idx + 1}`, {
+                    ...edgeContext,
+                    autofix: { type: 'normalize-choice-text', label: 'Autofix: set default choice text' }
+                });
             }
             if (typeof ch.target !== 'string' || ch.target.trim() === '') {
-                addIssue('error', `Missing choice target: "${id}" choice #${idx + 1}`, edgeContext);
+                addIssue('error', `Missing choice target: "${id}" choice #${idx + 1}`, {
+                    ...edgeContext,
+                    autofix: { type: 'normalize-choice-target', label: 'Autofix: retarget to fallback ending' }
+                });
             }
 
             if (ch.condition) {
                 if (typeof storyParsers.parseCondition === 'function') {
                     try { storyParsers.parseCondition(ch.condition); } catch (err) {
-                        addIssue('error', `Invalid condition in "${id}" choice #${idx + 1}: ${err.message}`, edgeContext);
+                        addIssue('warning', `Condition needs normalization in "${id}" choice #${idx + 1}: ${err.message}`, {
+                            ...edgeContext,
+                            autofix: { type: 'normalize-choice-condition', label: 'Autofix: normalize condition', safe: true }
+                        });
                     }
                 } else {
                     addIssue('warning', `Cannot parse-check condition in "${id}" choice #${idx + 1}: runtime parser unavailable.`, edgeContext);
@@ -2186,7 +2334,10 @@ function validateStory(options = {}) {
             if (ch.effect) {
                 if (typeof storyParsers.parseEffect === 'function') {
                     try { storyParsers.parseEffect(ch.effect); } catch (err) {
-                        addIssue('error', `Invalid effect in "${id}" choice #${idx + 1}: ${err.message}`, edgeContext);
+                        addIssue('warning', `Effect needs normalization in "${id}" choice #${idx + 1}: ${err.message}`, {
+                            ...edgeContext,
+                            autofix: { type: 'normalize-choice-effect', label: 'Autofix: normalize effect', safe: true }
+                        });
                     }
                 } else {
                     addIssue('warning', `Cannot parse-check effect in "${id}" choice #${idx + 1}: runtime parser unavailable.`, edgeContext);
@@ -2197,12 +2348,15 @@ function validateStory(options = {}) {
 
     const analyzer = runGraphAnalyzers(passages);
     analyzer.unreachableNodes.forEach(nodeId => {
-        addIssue('warning', `Unreachable node: "${nodeId}"`, { nodeId });
+        addIssue('warning', `Unreachable node: "${nodeId}"`, {
+            nodeId,
+            autofix: { type: 'connect-unreachable-node', nodeId, label: 'Autofix: connect from start', safe: true }
+        });
     });
     analyzer.noExitNodes.forEach(nodeId => {
         addIssue('warning', `No-exit node: "${nodeId}"`, {
             nodeId,
-            autofix: { type: 'connect-no-exit', nodeId, label: 'Autofix: connect to fallback ending' }
+            autofix: { type: 'connect-no-exit', nodeId, label: 'Autofix: connect to fallback ending', safe: true }
         });
     });
     analyzer.danglingRefs.forEach(ref => {
