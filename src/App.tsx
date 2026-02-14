@@ -38,6 +38,18 @@ export default function App() {
     loadStory(activeStoryId);
   }, []);
 
+  useEffect(() => {
+    (window as any).setAppMode = (nextMode: 'editor' | 'player') => {
+      if (nextMode !== 'editor' && nextMode !== 'player') return false;
+      setMode(nextMode);
+      return true;
+    };
+
+    return () => {
+      delete (window as any).setAppMode;
+    };
+  }, []);
+
   const setStoryStatus = (message: string, type = 'info') => setStatus({ message, type });
 
   const onLoadStoryByPath = async (path: string, label = path) => {
