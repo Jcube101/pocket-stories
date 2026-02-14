@@ -27,7 +27,8 @@ export function StoryEditor({ story, setStoryStatus, onLoadStoryByPath }: Props)
         <section className="sidebar-section">
           <h2>Stories</h2>
           <p className="story-status info">Use the story selector above to choose a story, then click "Load selected story".</p>
-          <label className="file-upload-label">Import story.yaml<input type="file" id="load-story" accept=".yaml,.yml,.json" /></label>
+          <label className="file-upload-label">Import user-generated story<input type="file" id="load-story" accept=".yaml,.yml,.json" /></label>
+          <p className="story-status info">Supports .yaml, .yml, and .json exports.</p>
           <div id="story-status" className="story-status" aria-live="polite"></div>
         </section>
         <section className="sidebar-section"><h2>Global Variables</h2><div id="variables"></div><div id="add-variable-form"><div className="row-inline"><select id="new-var-type"><option value="inventory">Inventory</option><option value="relationships">Relationships</option><option value="flags">Flags</option></select><input type="text" id="new-var-name" placeholder="Variable name" /><button id="add-var-btn">+ Add</button></div></div></section>
