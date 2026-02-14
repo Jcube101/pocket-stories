@@ -8,7 +8,7 @@ export type StoryListItem = { id: string; label: string; loader: () => Promise<s
 export function getAvailableStories(): StoryListItem[] {
   return Object.entries(storyModules).map(([path, loader]) => {
     const id = path.split('/').pop()!.replace('.yaml', '');
-    return { id, label: id.replaceAll('_', ' '), loader: loader as () => Promise<string> };
+    return { id, label: id.replace(/_/g, ' '), loader: loader as () => Promise<string> };
   });
 }
 
