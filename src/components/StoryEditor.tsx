@@ -26,13 +26,7 @@ export function StoryEditor({ story, setStoryStatus, onLoadStoryByPath }: Props)
       <div id="sidebar">
         <section className="sidebar-section">
           <h2>Stories</h2>
-          <select id="sample-story-select">
-            <option value="stories/forest_adventure.yaml">Forest Adventure (default)</option>
-            <option value="stories/space_outpost.yaml">Space Outpost</option>
-            <option value="stories/city_noir.yaml">City Noir</option>
-            <option value="stories/river_oath.yaml">River Oath</option>
-          </select>
-          <button id="load-sample-story">Load Selected Story</button>
+          <p className="story-status info">Use the story selector above to choose a story, then click "Load selected story".</p>
           <label className="file-upload-label">Import story.yaml<input type="file" id="load-story" accept=".yaml,.yml,.json" /></label>
           <div id="story-status" className="story-status" aria-live="polite"></div>
         </section>
