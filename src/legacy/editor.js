@@ -495,6 +495,8 @@ function getIncomingCounts(passages) {
 }
 
 function inferNodeVariant(id, passage, incomingCount = 0) {
+    const explicitVariant = getStoredNodeVariant(passage);
+    if (explicitVariant) return explicitVariant;
     if (id === 'start') return 'start';
     const choices = passage.choices || [];
     if (choices.length === 0) return 'ending';
@@ -502,6 +504,43 @@ function inferNodeVariant(id, passage, incomingCount = 0) {
     if (choices.length > 1) return 'choice';
     if (incomingCount > 1) return 'merge';
     return 'dialogue';
+}
+
+function normalizeVariantToken(value) {
+    return String(value || '').trim().toLowerCase();
+}
+
+function getStoredNodeVariantRaw(passage) {
+    if (!passage || typeof passage !== 'object') return '';
+    const metadataType = (passage.metadata && typeof passage.metadata === 'object' && typeof passage.metadata.nodeType === 'string')
+        ? passage.metadata.nodeType
+        : '';
+    if (typeof passage.nodeType === 'string' && passage.nodeType.trim()) return passage.nodeType;
+    return metadataType;
+}
+
+function getStoredNodeVariant(passage) {
+    const token = normalizeVariantToken(getStoredNodeVariantRaw(passage));
+    return Object.prototype.hasOwnProperty.call(NODE_VARIANTS, token) ? token : '';
+}
+
+function setStoredNodeVariant(passage, nextTypeToken) {
+    if (!passage || typeof passage !== 'object') return;
+    const normalized = normalizeVariantToken(nextTypeToken);
+    const storedValue = normalized || undefined;
+
+    if (storedValue) {
+        passage.nodeType = storedValue;
+        if (!passage.metadata || typeof passage.metadata !== 'object') passage.metadata = {};
+        passage.metadata.nodeType = storedValue;
+        return;
+    }
+
+    delete passage.nodeType;
+    if (passage.metadata && typeof passage.metadata === 'object') {
+        delete passage.metadata.nodeType;
+        if (Object.keys(passage.metadata).length === 0) delete passage.metadata;
+    }
 }
 
 function getNodeRisks(id, passage) {
@@ -601,9 +640,41 @@ function updateNodeInspector(nodeId = null) {
     inspectorEls.content.classList.remove('hidden');
     inspectorEls.id.value = nodeId;
     inspectorEls.id.dataset.originalId = nodeId;
-    inspectorEls.type.value = NODE_VARIANTS[variantId].label;
+    const explicitVariant = normalizeVariantToken(getStoredNodeVariantRaw(passage));
+    const hasKnownExplicitVariant = Boolean(explicitVariant) && Object.prototype.hasOwnProperty.call(NODE_VARIANTS, explicitVariant);
+    if (inspectorEls.type) {
+        inspectorEls.type.value = hasKnownExplicitVariant ? explicitVariant : (explicitVariant ? '__custom__' : '__auto__');
+    }
+    if (inspectorEls.typeCustom) {
+        inspectorEls.typeCustom.value = hasKnownExplicitVariant ? '' : explicitVariant;
+        inspectorEls.typeCustom.classList.toggle('hidden', !explicitVariant || hasKnownExplicitVariant);
+    }
     inspectorEls.text.value = (passage.text || '').trim();
     renderInspectorMeta(nodeId, passage);
+}
+
+function applyInspectorTypeEdit() {
+    const activeId = inspectorEls?.id?.dataset?.originalId;
+    const passage = activeId ? window.storyData.passages?.[activeId] : null;
+    if (!activeId || !passage || !inspectorEls?.type) return;
+
+    let nextToken = '';
+    if (inspectorEls.type.value === '__custom__') {
+        nextToken = normalizeVariantToken(inspectorEls.typeCustom?.value || '');
+    } else if (inspectorEls.type.value !== '__auto__') {
+        nextToken = normalizeVariantToken(inspectorEls.type.value);
+    }
+
+    setStoredNodeVariant(passage, nextToken);
+    if (inspectorEls.typeCustom) {
+        inspectorEls.typeCustom.classList.toggle('hidden', inspectorEls.type.value !== '__custom__');
+    }
+
+    refreshNodeCard(activeId);
+    renderPassageList();
+    updateNodeInspector(activeId);
+    drawConnections();
+    saveState();
 }
 
 function selectNodeByElement(node) {
@@ -772,6 +843,7 @@ function initEditor() {
         content: document.querySelector('#node-inspector .inspector-content'),
         id: document.getElementById('inspector-node-id'),
         type: document.getElementById('inspector-node-type'),
+        typeCustom: document.getElementById('inspector-node-type-custom'),
         text: document.getElementById('inspector-node-text'),
         meta: document.getElementById('inspector-node-meta')
     };
@@ -823,6 +895,32 @@ function initEditor() {
             refreshNodeCard(activeId);
             renderPassageList();
             saveState();
+        };
+    }
+
+    if (inspectorEls.type) {
+        inspectorEls.type.onchange = () => {
+            if (inspectorEls.type.value === '__custom__') {
+                if (inspectorEls.typeCustom) {
+                    inspectorEls.typeCustom.classList.remove('hidden');
+                    inspectorEls.typeCustom.focus();
+                }
+                return;
+            }
+            applyInspectorTypeEdit();
+        };
+    }
+
+    if (inspectorEls.typeCustom) {
+        inspectorEls.typeCustom.onblur = () => {
+            if (inspectorEls.type?.value === '__custom__') applyInspectorTypeEdit();
+        };
+        inspectorEls.typeCustom.onkeydown = e => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                applyInspectorTypeEdit();
+                inspectorEls.typeCustom.blur();
+            }
         };
     }
 
@@ -1790,6 +1888,11 @@ function exportStoryDataFromGraph() {
         const resolvedId = inspectorEls.id?.dataset.originalId;
         if (resolvedId && window.storyData.passages?.[resolvedId] && inspectorEls.text) {
             window.storyData.passages[resolvedId].text = inspectorEls.text.value + '\n';
+            if (inspectorEls.type) {
+                const isCustom = inspectorEls.type.value === '__custom__';
+                const typeToken = isCustom ? (inspectorEls.typeCustom?.value || '') : (inspectorEls.type.value === '__auto__' ? '' : inspectorEls.type.value);
+                setStoredNodeVariant(window.storyData.passages[resolvedId], typeToken);
+            }
         }
     }
 }
