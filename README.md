@@ -1,87 +1,57 @@
-# Pocket Stories
+# Pocket Stories (Vite + React + TypeScript)
 
-Pocket Stories is a lightweight, fully static Choose-Your-Own-Adventure engine with a visual graph editor and built-in player. It runs with plain HTML/CSS/JavaScript and works well on GitHub Pages.
-
-## What’s New
-
-- Right-click any node and choose **“Test from here”** to jump straight into Player Mode at that passage.
-- Validation now highlights:
-  - cycles/loops (amber)
-  - unreachable/orphaned passages (red)
-- Sidebar now includes a **Passage Search** panel to filter/focus nodes quickly.
-- Added **demo story hub**: [`demo.html`](demo.html)
-- Player mode now includes:
-  - fade transitions between passages
-  - typewriter text reveal
-  - subtle Web Audio cues for clicks/success/fail
-  - more robust save/load decoding (supports base64 and plain JSON progress files)
-  - linear “Export as Novel” replay from your played path
+Pocket Stories is now a Vite-powered React 18 + TypeScript app with tabs for **Editor** and **Player** mode.
 
 ## Quickstart
 
-1. Open [`index.html`](index.html) in a browser.
-2. Edit your story in **Editor Mode**:
-   - Double-click empty canvas to add a new passage.
-   - Drag from a node output dot to connect passages.
-   - Right-click a connection to edit choice text / condition / effect.
-   - Right-click a node to test from that node.
-3. Click **Validate Story** to find broken links, unreachable nodes, and cycles.
-4. Click **Play Story** to test normally from `start`.
-5. Export with **Export story.yaml**.
+```bash
+npm install
+npm run dev
+```
 
-## Variable Syntax (Conditions and Effects)
+Open `http://localhost:5173`.
 
-Pocket Stories supports three variable groups:
+## New Structure
 
-- `inventory` (bool/string/number values)
-- `relationships` (usually numeric scores)
-- `flags` (booleans)
+```text
+pocket-stories/
+├── public/
+│   └── stories/                 # static YAML copies for easy hosting/export
+├── src/
+│   ├── components/
+│   │   ├── StoryEditor.tsx
+│   │   ├── StoryList.tsx
+│   │   └── StoryPlayer.tsx
+│   ├── legacy/
+│   │   └── editor.js            # existing editor core logic, integrated in React
+│   ├── lib/
+│   │   ├── storyValidator.ts
+│   │   └── yamlLoader.ts
+│   ├── stories/                 # YAML source set used by import.meta.glob
+│   ├── styles/
+│   │   └── global.css
+│   ├── App.tsx
+│   └── main.tsx
+├── stories/                     # original YAML files kept intact
+├── index.html
+├── package.json
+├── tsconfig.json
+└── vite.config.ts
+```
 
-### Condition examples
+## Notes
 
-- `inventory.key == true`
-- `relationships.Alice >= 3`
-- `flags.opened_gate == false`
+- Existing YAML stories were **not deleted**.
+- Story loading is dynamic via `import.meta.glob`.
+- `story-validation.js` logic is migrated into typed `src/lib/storyValidator.ts`.
+- Player logic is now in `StoryPlayer.tsx` with loading/error states.
+- Editor UI is rendered by React (`StoryEditor.tsx`) and reuses the legacy editor engine (`src/legacy/editor.js`) for minimal-risk migration.
+- Responsive defaults are mobile-first with touch-friendly button sizing (44px min target).
 
-### Effect examples
+## Story URLs
 
-- `inventory.key = true`
-- `relationships.Alice += 2`
-- `relationships.Guard -= 1`
-- `flags.met_dragon = true`
+You can keep stories in both:
+- `src/stories/` (for dynamic module loading)
+- `public/stories/` (for static file serving)
 
-## Demo Stories
-
-Open [`demo.html`](demo.html) for sample stories:
-
-- Forest Adventure (default)
-- Space Outpost
-- City Noir
-- River Oath (new short story focused on relationships + inventory)
-
-You can also open a specific story directly:
-
-- `index.html?story=stories/forest_adventure.yaml`
-- `index.html?story=stories/space_outpost.yaml`
-- `index.html?story=stories/city_noir.yaml`
-- `index.html?story=stories/river_oath.yaml`
-
-## Screenshots
-
-### Editor (Space Outpost demo)
-
-![Editor screenshot](browser:/tmp/codex_browser_invocations/1d3008f52288297d/artifacts/assets/screenshots/editor-space-outpost.png)
-
-### Demo stories page
-
-![Demo page screenshot](browser:/tmp/codex_browser_invocations/1d3008f52288297d/artifacts/assets/screenshots/demo-page.png)
-
-## Deploy to GitHub Pages
-
-1. Create a GitHub repo and upload project files.
-2. In **Settings → Pages**, publish from `main` and `/ (root)`.
-3. Your app will be live at `https://<username>.github.io/<repo>/`.
-
-## Credits
-
-- [js-yaml](https://github.com/nodeca/js-yaml) (MIT)
+This dual setup keeps migration safe while preserving your original content.
