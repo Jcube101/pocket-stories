@@ -2,12 +2,57 @@ import { useEffect, useMemo, useState } from 'react';
 import { StoryEditor } from './components/StoryEditor';
 import { StoryList } from './components/StoryList';
 import { StoryPlayer } from './components/StoryPlayer';
-import { getAvailableStories, loadStoryById } from './lib/yamlLoader';
+import { getAvailableStories, loadStoryById, loadStoryFromRaw, type StoryListItem } from './lib/yamlLoader';
 import { parseStoryEffect, validateAndNormalizeStory, type StoryData } from './lib/storyValidator';
 
-const stories = getAvailableStories();
+const IMPORTED_STORIES_STORAGE_KEY = 'pocket_stories_imported_entries_v1';
+
+type ImportedStoryEntry = {
+  id: string;
+  label: string;
+  raw: string;
+  source: string;
+};
+
+type BridgeStoryEntry = {
+  id?: string;
+  label?: string;
+  raw: string;
+  source?: string;
+};
+
+const normalizeStoryId = (value: string) =>
+  value
+    .toLowerCase()
+    .replace(/\.[a-z0-9]+$/i, '')
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '') || 'imported_story';
+
+const makeUniqueStoryId = (desiredId: string, takenIds: Set<string>) => {
+  if (!takenIds.has(desiredId)) return desiredId;
+  let suffix = 2;
+  let candidate = `${desiredId}_${suffix}`;
+  while (takenIds.has(candidate)) {
+    suffix += 1;
+    candidate = `${desiredId}_${suffix}`;
+  }
+  return candidate;
+};
 
 export default function App() {
+  const [stories, setStories] = useState<StoryListItem[]>(() => getAvailableStories());
+  const [importedStories, setImportedStories] = useState<ImportedStoryEntry[]>(() => {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(IMPORTED_STORIES_STORAGE_KEY) || '[]');
+      if (!Array.isArray(parsed)) return [];
+      return parsed.filter(
+        (entry): entry is ImportedStoryEntry =>
+          Boolean(entry && typeof entry.id === 'string' && typeof entry.label === 'string' && typeof entry.raw === 'string' && typeof entry.source === 'string'),
+      );
+    } catch {
+      return [];
+    }
+  });
   const [mode, setMode] = useState<'editor' | 'player'>('editor');
   const [story, setStory] = useState<StoryData | null>(null);
   const [activeStoryId, setActiveStoryId] = useState<string>('forest_adventure');
@@ -16,11 +61,26 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<{ message: string; type: string }>({ message: 'Loading story...', type: 'info' });
 
+  useEffect(() => {
+    localStorage.setItem(IMPORTED_STORIES_STORAGE_KEY, JSON.stringify(importedStories));
+  }, [importedStories]);
+
+  useEffect(() => {
+    const builtInStories = getAvailableStories();
+    const importedList: StoryListItem[] = importedStories.map((entry) => ({
+      id: entry.id,
+      label: entry.label,
+      loader: () => Promise.resolve(entry.raw),
+    }));
+    setStories([...builtInStories, ...importedList]);
+  }, [importedStories]);
+
   const loadStory = async (id: string) => {
     setLoading(true);
     setError(null);
     try {
-      const loaded = await loadStoryById(id);
+      const imported = importedStories.find((entry) => entry.id === id);
+      const loaded = imported ? await loadStoryFromRaw(imported.raw) : await loadStoryById(id);
       setStory(loaded);
       setActiveStoryId(id);
       setStatus({ message: `Loaded: ${id}`, type: 'success' });
@@ -39,6 +99,36 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    (window as any).registerImportedStoryEntry = async ({ id, label, raw, source }: BridgeStoryEntry) => {
+      if (!raw) return null;
+
+      const takenIds = new Set(stories.map((storyItem) => storyItem.id));
+      const requestedId = normalizeStoryId(id || source || label || 'imported_story');
+      const resolvedId = makeUniqueStoryId(requestedId, takenIds);
+      const resolvedLabel = label?.trim() || source || resolvedId;
+      const resolvedSource = source || label || resolvedId;
+
+      setImportedStories((prev) => {
+        const existingIndex = prev.findIndex((entry) => entry.id === resolvedId);
+        const nextEntry: ImportedStoryEntry = { id: resolvedId, label: resolvedLabel, raw, source: resolvedSource };
+        if (existingIndex >= 0) {
+          const next = [...prev];
+          next[existingIndex] = nextEntry;
+          return next;
+        }
+        return [...prev, nextEntry];
+      });
+
+      setPendingStoryId(resolvedId);
+      return { id: resolvedId, label: resolvedLabel };
+    };
+
+    return () => {
+      delete (window as any).registerImportedStoryEntry;
+    };
+  }, [stories]);
+
+  useEffect(() => {
     (window as any).setAppMode = (nextMode: 'editor' | 'player') => {
       if (nextMode !== 'editor' && nextMode !== 'player') return false;
       setMode(nextMode);
@@ -53,7 +143,7 @@ export default function App() {
   const setStoryStatus = (message: string, type = 'info') => setStatus({ message, type });
 
   const onLoadStoryByPath = async (path: string, label = path) => {
-    const id = path.split('/').pop()?.replace('.yaml', '') ?? activeStoryId;
+    const id = normalizeStoryId(path.split('/').pop() || activeStoryId);
     setPendingStoryId(id);
     await loadStory(id);
     setStatus({ message: `Loaded: ${label}`, type: 'success' });
