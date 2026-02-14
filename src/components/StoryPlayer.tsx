@@ -38,7 +38,9 @@ export function StoryPlayer({ story, loading, error }: Props) {
 
   const applyEffect = (effect: string) => {
     const parsed = parseStoryEffect(effect);
-    if (!parsed.ok) return;
+    if (!parsed.ok) {
+      return;
+    }
     const nextState = structuredClone(variablesState);
     const { path, operator, value } = parsed.effect;
     const keys = path.split('.');
