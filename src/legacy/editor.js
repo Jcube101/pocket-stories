@@ -5,6 +5,7 @@ let variables = { inventory: {}, relationships: {}, flags: {} };
 let pan = { x: 0, y: 0 };
 let scale = 1;
 let isPanning = false;
+let isSpacePanning = false;
 let panStart = { x: 0, y: 0 };
 let connectingFrom = null;
 let selectedNode = null;
@@ -1018,7 +1019,15 @@ function bindEditorEvents() {
     });
 
     wrapper.addEventListener('mousedown', e => {
-        if (e.button === 1 || (e.button === 0 && e.shiftKey && !e.target.closest('.node'))) {
+        const isLeftButton = e.button === 0;
+        const isMiddleButton = e.button === 1;
+        const isOnNode = Boolean(e.target.closest('.node'));
+        const isOnConnectionEditTarget = Boolean(e.target.closest('.connection-path, .connection-label, .node-output'));
+        const isOnInteractiveControl = Boolean(e.target.closest('button, input, textarea, select, option, a, label, [contenteditable="true"]'));
+        const isCanvasBackground = e.target === wrapper || e.target === svgCanvas;
+        const shouldPanWithLeftButton = isLeftButton && !isOnNode && !isOnConnectionEditTarget && !isOnInteractiveControl && (isCanvasBackground || e.shiftKey || isSpacePanning);
+
+        if (isMiddleButton || shouldPanWithLeftButton) {
             isPanning = true;
             panStart.x = e.clientX - pan.x;
             panStart.y = e.clientY - pan.y;
@@ -1043,6 +1052,17 @@ function bindEditorEvents() {
             isPanning = false;
             wrapper.style.cursor = 'default';
         }
+    });
+
+    document.addEventListener('keydown', e => {
+        if (e.code !== 'Space') return;
+        if (e.target.closest('input, textarea, select, [contenteditable="true"]')) return;
+        isSpacePanning = true;
+    });
+
+    document.addEventListener('keyup', e => {
+        if (e.code !== 'Space') return;
+        isSpacePanning = false;
     });
 
     editorEventsBound = true;
