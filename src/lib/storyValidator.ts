@@ -18,6 +18,17 @@ export type StoryData = {
 
 export type StoryChoice = { text: string; target: string; condition?: string; effect?: string; [k: string]: unknown };
 
+export type EffectOperator = '=' | '+=' | '-=';
+
+export type StoryEffect = {
+  root: 'inventory' | 'relationships' | 'flags';
+  path: string;
+  operator: EffectOperator;
+  value: string | number | boolean;
+};
+
+export type ParseEffectResult = { ok: true; effect: StoryEffect } | { ok: false; error: string };
+
 const EFFECT_ROOTS = new Set(['inventory', 'relationships', 'flags']);
 const DANGEROUS_EFFECT_KEYS = new Set(['__proto__', 'prototype', 'constructor']);
 
@@ -34,7 +45,7 @@ function parsePrimitiveValue(raw: string): string | number | boolean {
   return v;
 }
 
-export function parseStoryEffect(effect: string) {
+export function parseStoryEffect(effect: string): ParseEffectResult {
   if (typeof effect !== 'string') return { ok: false, error: 'Effect must be a string.' };
   const input = effect.trim();
   if (!input) return { ok: false, error: 'Effect cannot be empty.' };
@@ -46,8 +57,9 @@ export function parseStoryEffect(effect: string) {
   const path = rawPath.trim();
   const valueText = rawValue.trim();
   const segments = path.split('.');
-  const [root] = segments;
-  if (!EFFECT_ROOTS.has(root)) return { ok: false, error: `Unsupported effect root "${root}".` };
+  const [rootSegment] = segments;
+  if (!EFFECT_ROOTS.has(rootSegment)) return { ok: false, error: `Unsupported effect root "${rootSegment}".` };
+  const root = rootSegment as StoryEffect['root'];
   if (segments.length < 2) return { ok: false, error: 'Effect path must include a key after the root.' };
 
   for (const segment of segments) {
