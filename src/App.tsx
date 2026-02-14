@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { StoryEditor } from './components/StoryEditor';
 import { StoryList } from './components/StoryList';
-import { StoryPlayer } from './components/StoryPlayer';
+import { PlayerView } from './components/PlayerView';
 import { getAvailableStories, loadStoryById, loadStoryFromRaw, type StoryListItem } from './lib/yamlLoader';
 import { parseStoryEffect, validateAndNormalizeStory, type StoryData } from './lib/storyValidator';
 
@@ -178,7 +178,7 @@ export default function App() {
         {mode === 'editor' ? (
           <StoryEditor story={story} activeStoryId={activeStoryId} setStoryStatus={setStoryStatus} onLoadStoryByPath={onLoadStoryByPath} />
         ) : (
-          <StoryPlayer story={story} loading={loading} error={error} />
+          <PlayerView storyData={story} loading={loading} error={error} />
         )}
       </main>
     </div>
