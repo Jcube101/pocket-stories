@@ -1152,6 +1152,16 @@ h1 {
 
 :root {
   font-size: 16px;
+  --app-bg: #f4f6fb;
+  --surface-card: #ffffff;
+  --text-primary: #1f2937;
+  --text-muted: #4b5563;
+  --border-subtle: #cbd5e1;
+  --button-bg: #ffffff;
+  --button-text: #1f2937;
+  --button-border: #cbd5e1;
+  --button-hover-bg: #f1f5f9;
+  --button-hover-border: #93c5fd;
 }
 
 * { box-sizing: border-box; }
@@ -1160,6 +1170,8 @@ h1 {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
+  background: var(--app-bg);
+  color: var(--text-primary);
 }
 
 .top-header {
@@ -1167,6 +1179,8 @@ h1 {
   flex-direction: column;
   gap: 0.75rem;
   align-items: center;
+  background: var(--surface-card);
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .main-content {
@@ -1174,12 +1188,16 @@ h1 {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
+  background: var(--app-bg);
+  color: var(--text-primary);
 }
 
 .card {
   border-radius: 0.75rem;
   padding: 0.75rem;
-  background: rgba(255, 255, 255, 0.9);
+  background: var(--surface-card);
+  color: var(--text-primary);
+  border: 1px solid var(--border-subtle);
 }
 
 .story-grid,
@@ -1193,8 +1211,90 @@ h1 {
 .choice-button {
   min-height: 44px;
   border-radius: 0.6rem;
-  border: 1px solid #cbd5e1;
+  border: 1px solid var(--button-border);
   padding: 0.6rem 0.75rem;
+  background: var(--button-bg);
+  color: var(--button-text);
+}
+
+body {
+  background: var(--app-bg);
+  color: var(--text-primary);
+}
+
+#sidebar {
+  background: var(--surface-card);
+  border-right-color: var(--border-subtle);
+  color: var(--text-primary);
+}
+
+.sidebar-section,
+.story-list,
+.history-panel {
+  background: var(--surface-card);
+  border-color: var(--border-subtle);
+  color: var(--text-primary);
+}
+
+.story-status,
+.status-message {
+  color: var(--text-muted);
+}
+
+#passage-container {
+  color: var(--text-primary);
+}
+
+#passage-text {
+  background: color-mix(in srgb, var(--surface-card) 88%, var(--app-bg));
+  color: var(--text-primary);
+  border: 1px solid var(--border-subtle);
+}
+
+#choices button,
+.choice-button {
+  background: var(--button-bg);
+  color: var(--button-text);
+  border-color: var(--button-border);
+}
+
+#choices button:hover,
+.choice-button:hover {
+  background: var(--button-hover-bg);
+  border-color: var(--button-hover-border);
+}
+
+.file-upload-label {
+  background: var(--surface-card);
+  border-color: var(--border-subtle);
+  color: var(--text-primary);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --app-bg: #0f172a;
+    --surface-card: #111827;
+    --text-primary: #f3f4f6;
+    --text-muted: #cbd5e1;
+    --border-subtle: #334155;
+    --button-bg: #0b1220;
+    --button-text: #f3f4f6;
+    --button-border: #475569;
+    --button-hover-bg: #172133;
+    --button-hover-border: #60a5fa;
+  }
+
+  body,
+  .app-shell,
+  .main-content,
+  #passage-container,
+  #passage-text,
+  .story-list,
+  .history-panel,
+  .story-status,
+  .status-message {
+    color: var(--text-primary);
+  }
 }
 
 .player-layout {
