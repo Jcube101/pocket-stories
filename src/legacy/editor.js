@@ -834,6 +834,7 @@ function initEditor() {
     }
 
     bindEditorEvents();
+    bindToolbarEvents();
 
     // Wheel zoom
     nodesContainer.onwheel = e => {
@@ -935,6 +936,35 @@ function initEditor() {
         expandCanvasIfNeeded();
         saveState();
     };
+}
+
+function bindToolbarEvents() {
+    const btnValidate = document.getElementById('validate-story');
+    const btnExport = document.getElementById('export-yaml');
+    const btnBranching = document.getElementById('branching-script');
+    const btnPlay = document.getElementById('play-story');
+
+    if (btnValidate) {
+        btnValidate.onclick = () => validateStory();
+    } else {
+        console.warn('Button #validate-story not found');
+    }
+
+    if (btnExport) {
+        btnExport.onclick = () => exportYAML();
+    } else {
+        console.warn('Button #export-yaml not found');
+    }
+
+    if (btnBranching) {
+        btnBranching.onclick = () => generateBranchingScript();
+    } else {
+        console.warn('Button #branching-script not found');
+    }
+
+    if (btnPlay) {
+        btnPlay.onclick = () => document.getElementById('player-btn').click();
+    }
 }
 
 function bindEditorEvents() {
@@ -2486,10 +2516,6 @@ document.addEventListener('keydown', e => {
 });
 
 // One-time sidebar tool bindings (runs once, survives initEditor rebuilds)
-const btnValidate = document.getElementById('validate-story');
-const btnExport = document.getElementById('export-yaml');
-const btnBranching = document.getElementById('branching-script');
-const btnPlay = document.getElementById('play-story');
 const sidebar = document.getElementById('sidebar');
 const graphContainer = document.getElementById('graph-container');
 const toggleBtn = document.getElementById('toggle-sidebar');
@@ -2537,28 +2563,6 @@ if (addVarBtn && varTypeSelect && varNameInput) {
             addVarBtn.click();
         }
     });
-}
-
-if (btnValidate) {
-    btnValidate.onclick = () => validateStory();
-} else {
-    console.warn('Button #validate-story not found');
-}
-
-if (btnExport) {
-    btnExport.onclick = () => exportYAML();
-} else {
-    console.warn('Button #export-yaml not found');
-}
-
-if (btnBranching) {
-    btnBranching.onclick = () => generateBranchingScript();
-} else {
-    console.warn('Button #branching-script not found');
-}
-
-if (btnPlay) {
-    btnPlay.onclick = () => document.getElementById('player-btn').click();
 }
 
 if (toggleBtn) {
