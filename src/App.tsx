@@ -51,10 +51,10 @@ export default function App() {
     <div className="app-shell">
       <header className="top-header">
         <h1>Pocket Stories</h1>
-        <div className="tab-row">
+        <nav className="tab-row" aria-label="Mode selector">
           <button className={`choice-button ${mode === 'editor' ? 'active' : ''}`} onClick={() => setMode('editor')}>Editor</button>
           <button className={`choice-button ${mode === 'player' ? 'active' : ''}`} onClick={() => setMode('player')}>Player</button>
-        </div>
+        </nav>
       </header>
 
       <main className="main-content">

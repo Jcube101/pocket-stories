@@ -1201,11 +1201,19 @@ h1 {
 }
 
 .story-grid,
-.choices-grid,
-.tab-row {
+.choices-grid {
   display: grid;
   gap: 0.5rem;
   grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+}
+
+.tab-row {
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: nowrap;
 }
 
 .choice-button {
@@ -1215,6 +1223,14 @@ h1 {
   padding: 0.6rem 0.75rem;
   background: var(--button-bg);
   color: var(--button-text);
+}
+
+.choice-button.active {
+  background: #1d4ed8;
+  color: #ffffff;
+  border-color: #1e40af;
+  box-shadow: 0 0 0 2px color-mix(in srgb, #1d4ed8 40%, transparent);
+  font-weight: 600;
 }
 
 body {
