@@ -1185,16 +1185,36 @@ h1 {
 
 :root {
   font-size: 16px;
-  --app-bg: #f4f6fb;
-  --surface-card: #ffffff;
-  --text-primary: #1f2937;
-  --text-muted: #4b5563;
-  --border-subtle: #cbd5e1;
+  --font-player-sans: "Inter", "Avenir Next", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --font-player-serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+  --space-1: 0.375rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-10: 2.5rem;
+  --radius-card: 1rem;
+  --shadow-card: 0 20px 45px -22px rgba(15, 23, 42, 0.45);
+  --player-bg: #e9eef5;
+  --player-surface: #f8fafc;
+  --player-surface-elevated: #ffffff;
+  --player-text: #1f2937;
+  --player-text-muted: #4b5563;
+  --player-border: #cbd5e1;
+  --player-accent: #2f8f96;
+  --player-accent-soft: #d7edf0;
+  --app-bg: var(--player-bg);
+  --surface-card: var(--player-surface-elevated);
+  --text-primary: var(--player-text);
+  --text-muted: var(--player-text-muted);
+  --border-subtle: var(--player-border);
   --button-bg: #ffffff;
-  --button-text: #1f2937;
-  --button-border: #cbd5e1;
-  --button-hover-bg: #f1f5f9;
-  --button-hover-border: #93c5fd;
+  --button-text: var(--player-text);
+  --button-border: var(--player-border);
+  --button-hover-bg: var(--player-accent-soft);
+  --button-hover-border: var(--player-accent);
 }
 
 * { box-sizing: border-box; }
@@ -1217,27 +1237,28 @@ h1 {
 }
 
 .main-content {
-  padding: 0.75rem;
+  padding: var(--space-3);
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: var(--space-4);
   background: var(--app-bg);
   color: var(--text-primary);
 }
 
 .card {
-  border-radius: 0.75rem;
-  padding: 0.75rem;
+  border-radius: var(--radius-card);
+  padding: var(--space-4);
   background: var(--surface-card);
   color: var(--text-primary);
   border: 1px solid var(--border-subtle);
+  box-shadow: var(--shadow-card);
 }
 
 .story-grid,
 .choices-grid {
   display: grid;
-  gap: 0.5rem;
-  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  gap: var(--space-3);
+  grid-template-columns: repeat(auto-fit, minmax(12.5rem, 1fr));
 }
 
 .tab-row {
@@ -1321,16 +1342,25 @@ body {
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --app-bg: #0f172a;
-    --surface-card: #111827;
-    --text-primary: #f3f4f6;
-    --text-muted: #cbd5e1;
-    --border-subtle: #334155;
-    --button-bg: #0b1220;
-    --button-text: #f3f4f6;
-    --button-border: #475569;
-    --button-hover-bg: #172133;
-    --button-hover-border: #60a5fa;
+    --shadow-card: 0 28px 52px -26px rgba(2, 6, 23, 0.85);
+    --player-bg: #0f1720;
+    --player-surface: #161f2b;
+    --player-surface-elevated: #1b2734;
+    --player-text: #edf2f7;
+    --player-text-muted: #b0bdcc;
+    --player-border: #334155;
+    --player-accent: #73c5c9;
+    --player-accent-soft: #1d3b47;
+    --app-bg: var(--player-bg);
+    --surface-card: var(--player-surface-elevated);
+    --text-primary: var(--player-text);
+    --text-muted: var(--player-text-muted);
+    --border-subtle: var(--player-border);
+    --button-bg: #13202d;
+    --button-text: var(--player-text);
+    --button-border: var(--player-border);
+    --button-hover-bg: #1e3142;
+    --button-hover-border: var(--player-accent);
   }
 
   body,
@@ -1349,14 +1379,32 @@ body {
 .player-layout {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 0.75rem;
+  gap: var(--space-4);
+  align-items: start;
+  width: min(68rem, 100%);
+  margin: 0 auto;
+  padding: var(--space-5) var(--space-3) var(--space-8);
+  min-height: calc(100vh - 9.5rem);
 }
 
-.passage-text { white-space: pre-wrap; line-height: 1.5; }
+.passage-text {
+  white-space: pre-wrap;
+  line-height: 1.82;
+  font-family: var(--font-player-serif);
+  font-size: clamp(1.02rem, 0.95rem + 0.3vw, 1.2rem);
+  letter-spacing: 0.01em;
+}
+
+.player-heading,
+.player-control,
+.choices-grid button {
+  font-family: var(--font-player-sans);
+}
 
 @media (min-width: 900px) {
   .player-layout { grid-template-columns: 2fr 1fr; }
-  .main-content { padding: 1rem 1.25rem; }
+  .main-content { padding: var(--space-4) var(--space-5); }
+  .player-layout { padding: var(--space-8) var(--space-5) var(--space-10); }
 }
 
 /* Sidebar collapse + responsive layout sync (React + legacy classes) */

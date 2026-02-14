@@ -1,15 +1,5 @@
-import { AnimatePresence, motion } from 'framer-motion';
 import { useEffect, useState } from 'react';
 import { parseStoryEffect, type StoryData } from '../lib/storyValidator';
-
-const playerMotion = {
-  timing: {
-    passage: 0.3,
-    choiceList: 0.22,
-    choiceItem: 0.18,
-  },
-  ease: [0.22, 1, 0.36, 1] as const,
-};
 
 type PlayerViewProps = {
   storyData: StoryData | null;
@@ -48,12 +38,12 @@ export function PlayerView({ storyData, loading, error }: PlayerViewProps) {
     setHistory([]);
   }, [storyData]);
 
-  if (loading) return <p className="text-slate-500 dark:text-slate-300">Loading story…</p>;
-  if (error) return <p className="text-red-600 dark:text-red-400">{error}</p>;
-  if (!storyData) return <p className="text-slate-500 dark:text-slate-300">Load a story to start playing.</p>;
+  if (loading) return <p className="player-control text-player-muted">Loading story…</p>;
+  if (error) return <p className="player-control text-red-600 dark:text-red-400">{error}</p>;
+  if (!storyData) return <p className="player-control text-player-muted">Load a story to start playing.</p>;
 
   const passage = storyData.passages[currentPassage];
-  if (!passage) return <p className="text-red-600 dark:text-red-400">Current passage not found.</p>;
+  if (!passage) return <p className="player-control text-red-600 dark:text-red-400">Current passage not found.</p>;
 
   const evalCondition = (condition: string) => {
     try {
@@ -85,36 +75,23 @@ export function PlayerView({ storyData, loading, error }: PlayerViewProps) {
   const visibleChoices = (passage.choices ?? []).filter((choice) => !choice.condition || evalCondition(choice.condition));
 
   return (
-    <section className="grid grid-cols-1 gap-3 lg:grid-cols-[2fr_1fr]">
-      <div id="passage-container" className="rounded-xl border border-slate-300 bg-white p-3 text-slate-800 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={currentPassage}
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -6 }}
-            transition={{ duration: playerMotion.timing.passage, ease: playerMotion.ease }}
-          >
-            <div id="passage-text" className="mb-3 whitespace-pre-wrap rounded-lg border border-slate-300 bg-slate-50 p-3 leading-relaxed text-slate-800 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-100">
+    <section className="player-layout">
+      <div id="passage-container" className="card border-player-border bg-player-surface-elevated p-playerLg text-player-text">
+        <div key={currentPassage}>
+            <div id="passage-text" className="passage-text mb-playerMd rounded-xl border border-player-border bg-player-surface p-playerLg text-player-text">
               {passage.text.trim()}
             </div>
-            <motion.div
+            <div
               id="choices"
-              className="grid grid-cols-1 gap-2 sm:grid-cols-2"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: playerMotion.timing.choiceList, ease: playerMotion.ease }}
+              className="choices-grid grid-cols-1 sm:grid-cols-2"
             >
               {visibleChoices.length === 0 ? (
                 <p className="text-slate-500 dark:text-slate-300">No available choices.</p>
               ) : (
                 visibleChoices.map((choice, index) => (
-                  <motion.button
+                  <button
                     key={`${choice.text}-${index}`}
-                    className="min-h-11 rounded-lg border border-slate-300 bg-white px-3 py-2 text-left text-slate-800 transition-colors hover:border-sky-300 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-950 dark:text-slate-100 dark:hover:border-sky-400 dark:hover:bg-slate-800"
-                    initial={{ opacity: 0, y: 4 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: playerMotion.timing.choiceItem, delay: index * 0.03, ease: playerMotion.ease }}
+                    className="player-control min-h-11 rounded-xl border border-player-border bg-player-surface-elevated px-playerMd py-playerSm text-left text-player-text transition-colors hover:border-player-accent hover:bg-player-accent-soft"
                     onClick={() => {
                       if (choice.effect) applyEffect(choice.effect);
                       setHistory((prev: HistoryItem[]) => [...prev, { passage: currentPassage, choiceText: choice.text, target: choice.target }]);
@@ -122,17 +99,16 @@ export function PlayerView({ storyData, loading, error }: PlayerViewProps) {
                     }}
                   >
                     {choice.text}
-                  </motion.button>
+                  </button>
                 ))
               )}
-            </motion.div>
-          </motion.div>
-        </AnimatePresence>
+            </div>
+          </div>
       </div>
-      <aside className="rounded-xl border border-slate-300 bg-white p-3 text-slate-800 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
-        <h3 className="mb-2 text-lg font-semibold">History</h3>
+      <aside className="card border-player-border bg-player-surface-elevated p-playerLg text-player-text">
+        <h3 className="player-heading mb-playerSm text-2xl font-semibold tracking-tight">History</h3>
         <button
-          className="mb-3 min-h-11 rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-800 transition-colors hover:border-sky-300 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-950 dark:text-slate-100 dark:hover:border-sky-400 dark:hover:bg-slate-800"
+          className="player-control mb-playerMd min-h-11 rounded-xl border border-player-border bg-player-surface-elevated px-playerMd py-playerSm text-player-text transition-colors hover:border-player-accent hover:bg-player-accent-soft"
           onClick={() => {
             setCurrentPassage('start');
             setVariablesState(normalizeVariables(storyData.variables));
@@ -141,7 +117,7 @@ export function PlayerView({ storyData, loading, error }: PlayerViewProps) {
         >
           Restart
         </button>
-        <ol className="list-decimal space-y-1 pl-5 text-sm text-slate-600 dark:text-slate-300">
+        <ol className="list-decimal space-y-playerSm pl-5 text-sm text-player-muted">
           {history.map((item: HistoryItem, idx: number) => (
             <li key={`${item.passage}-${idx}`}>
               {item.choiceText} → {item.target}
