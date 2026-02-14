@@ -852,11 +852,40 @@ h1 {
 }
 
 .variable-label {
+    position: relative;
+    display: block;
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
     font-weight: 600;
+}
+
+.variable-label:hover::after,
+.variable-label:focus-visible::after {
+    content: attr(data-variable-path);
+    position: absolute;
+    left: 0;
+    bottom: calc(100% + 6px);
+    z-index: 20;
+    max-width: min(320px, 60vw);
+    padding: 5px 8px;
+    border-radius: 6px;
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    background: rgba(15, 23, 42, 0.96);
+    color: #f8fafc;
+    font-size: 0.78rem;
+    font-weight: 500;
+    line-height: 1.2;
+    white-space: normal;
+    word-break: break-word;
+    pointer-events: none;
+}
+
+.variable-label:focus-visible {
+    outline: 2px solid #38bdf8;
+    outline-offset: 2px;
+    border-radius: 4px;
 }
 
 .variable-input {

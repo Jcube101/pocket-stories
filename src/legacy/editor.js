@@ -1643,6 +1643,9 @@ function renderVariables() {
             const label = document.createElement('label');
             label.className = 'variable-label';
             label.textContent = key;
+            label.title = `${cat}.${key}`;
+            label.dataset.variablePath = `${cat}.${key}`;
+            label.tabIndex = 0;
             row.appendChild(label);
 
             const input = document.createElement('input');
