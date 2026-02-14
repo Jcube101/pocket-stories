@@ -2735,6 +2735,7 @@ if (loadStoryInput) {
                 const isJson = file.name.toLowerCase().endsWith('.json');
                 const parsed = isJson ? JSON.parse(raw) : jsyaml.load(raw);
                 const importHash = await hashText(raw);
+                let importedStoryEntry = null;
                 if (typeof window.loadStoryData === 'function') {
                     window.loadStoryData(parsed, file.name, { importHash });
                 } else {
@@ -2766,6 +2767,20 @@ if (loadStoryInput) {
                         window.setStoryStatus(`Imported: ${file.name}`, 'success');
                     }
                 }
+
+                if (typeof window.registerImportedStoryEntry === 'function') {
+                    importedStoryEntry = await window.registerImportedStoryEntry({
+                        id: file.name,
+                        label: file.name,
+                        raw,
+                        source: file.name
+                    });
+                }
+
+                if (importedStoryEntry?.id && typeof window.loadStoryByPath === 'function') {
+                    await window.loadStoryByPath(importedStoryEntry.id, importedStoryEntry.label || file.name);
+                }
+
                 alert(`Story imported: ${file.name}`);
             } catch (err) {
                 console.error(err);
