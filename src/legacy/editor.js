@@ -1737,16 +1737,51 @@ function getCategoryTooltip(cat) {
 }
 
 function exportStoryDataFromGraph() {
-    // No change needed — data lives in window.storyData
+    if (!window.storyData || !inspectorEls) return;
+
+    const activeId = inspectorEls.id?.dataset.originalId;
+    if (activeId && window.storyData.passages?.[activeId]) {
+        const pendingId = (inspectorEls.id?.value || '').trim();
+        if (pendingId && pendingId !== activeId && !window.storyData.passages[pendingId]) {
+            window.storyData.passages[pendingId] = JSON.parse(JSON.stringify(window.storyData.passages[activeId]));
+            delete window.storyData.passages[activeId];
+            Object.values(window.storyData.passages).forEach(p => {
+                (p.choices || []).forEach(choice => {
+                    if (choice.target === activeId) choice.target = pendingId;
+                });
+            });
+            inspectorEls.id.dataset.originalId = pendingId;
+        }
+
+        const resolvedId = inspectorEls.id?.dataset.originalId;
+        if (resolvedId && window.storyData.passages?.[resolvedId] && inspectorEls.text) {
+            window.storyData.passages[resolvedId].text = inspectorEls.text.value + '\n';
+        }
+    }
+}
+
+function sanitizeExportFileName(name) {
+    return String(name || '')
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '') || 'story';
+}
+
+function getExportFileName() {
+    const storyTitle = window.storyData?.title;
+    const activeStoryId = window.activeStoryId || window.storyData?.metadata?.storyIdentity;
+    const sanitizedName = sanitizeExportFileName(storyTitle || activeStoryId);
+    return `${sanitizedName}.yaml`;
 }
 
 function exportYAML() {
     try {
         console.log('Starting exportYAML');
-        exportStoryDataFromGraph(); // if this exists
+        exportStoryDataFromGraph();
         const yamlText = jsyaml.dump(window.storyData);
         console.log('YAML generated:', yamlText.substring(0, 100)); // preview
-        downloadFile("story.yaml", "text/yaml", yamlText);
+        downloadFile(getExportFileName(), 'text/yaml', yamlText);
     } catch (err) {
         console.error('Export failed:', err);
         alert('Export failed: ' + err.message);

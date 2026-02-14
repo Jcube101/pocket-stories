@@ -86,7 +86,7 @@ export default function App() {
         />
         {topStatus}
         {mode === 'editor' ? (
-          <StoryEditor story={story} setStoryStatus={setStoryStatus} onLoadStoryByPath={onLoadStoryByPath} />
+          <StoryEditor story={story} activeStoryId={activeStoryId} setStoryStatus={setStoryStatus} onLoadStoryByPath={onLoadStoryByPath} />
         ) : (
           <StoryPlayer story={story} loading={loading} error={error} />
         )}
