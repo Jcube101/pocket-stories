@@ -2911,6 +2911,10 @@ if (addVarBtn && varTypeSelect && varNameInput) {
 
 if (toggleBtn) {
     toggleBtn.onclick = () => {
+        if (typeof window.toggleSidebarCollapsed === 'function') {
+            window.toggleSidebarCollapsed();
+            return;
+        }
         sidebar.classList.toggle('hidden');
         graphContainer.classList.toggle('expanded');
         toggleBtn.textContent = sidebar.classList.contains('hidden') ? '▶' : '◀';
