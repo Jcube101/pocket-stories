@@ -963,8 +963,26 @@ function bindToolbarEvents() {
     }
 
     if (btnPlay) {
-        btnPlay.onclick = () => document.getElementById('player-btn').click();
+        btnPlay.onclick = () => requestPlayerMode('Play Story button');
     }
+}
+
+function requestPlayerMode(sourceLabel = 'Editor') {
+    if (typeof window.setAppMode === 'function') {
+        const switched = window.setAppMode('player');
+        if (switched === false && typeof window.setStoryStatus === 'function') {
+            window.setStoryStatus(`Unable to switch to player mode from ${sourceLabel}.`, 'error');
+        }
+        return Boolean(switched);
+    }
+
+    const fallbackMessage = `Unable to open player mode from ${sourceLabel}: app mode bridge unavailable.`;
+    if (typeof window.setStoryStatus === 'function') {
+        window.setStoryStatus(fallbackMessage, 'error');
+    } else {
+        console.error(fallbackMessage);
+    }
+    return false;
 }
 
 function bindEditorEvents() {
@@ -1172,7 +1190,7 @@ function createNode(id, text, index) {
         const nodeId = nodeDiv.dataset.id;
         if (confirm(`Test from here? Start Player Mode at "${nodeId}".`)) {
             window.__playerStartPassage = nodeId;
-            document.getElementById('player-btn').click();
+            requestPlayerMode(`node ${nodeId}`);
         }
     });
 
