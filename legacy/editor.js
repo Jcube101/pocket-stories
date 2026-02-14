@@ -838,8 +838,22 @@ function initEditor() {
     // Wheel zoom
     nodesContainer.onwheel = e => {
         e.preventDefault();
+        const wrapper = document.getElementById('canvas-wrapper');
+        if (!wrapper) return;
+
+        const wrapperRect = wrapper.getBoundingClientRect();
+        const pointerX = e.clientX - wrapperRect.left;
+        const pointerY = e.clientY - wrapperRect.top;
+        const worldX = (pointerX - pan.x) / scale;
+        const worldY = (pointerY - pan.y) / scale;
+
         const factor = e.deltaY < 0 ? 1.1 : 0.9;
-        scale = Math.max(0.3, Math.min(scale * factor, 2));
+        const nextScale = Math.max(0.3, Math.min(scale * factor, 2));
+        scale = nextScale;
+
+        pan.x = pointerX - (worldX * scale);
+        pan.y = pointerY - (worldY * scale);
+
         updateTransform();
         updateZoomIndicator();
     };
