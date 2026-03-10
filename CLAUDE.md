@@ -1,14 +1,17 @@
 # CLAUDE.md — Pocket Stories
 
-This file contains everything needed to orient yourself quickly when working on this project.
+Quick-start orientation for working on this project. For deeper context, read the companion docs:
+
+- `spec.md` — what the app is, who it's for, core behaviors
+- `decisions.md` — architectural choices and why (don't relitigate these)
+- `known-issues.md` — all bugs found in the initial audit with file + line refs
+- `roadmap.md` — phased plan: what to fix and in what order
 
 ---
 
 ## What This Project Is
 
-**Pocket Stories** is a static, client-side interactive fiction editor and player. No backend, no database. Stories are YAML files that define branching narratives with variable state (inventory, relationships, flags), conditions, and effects.
-
-The app is deployed to GitHub Pages at `https://Jcube101.github.io/pocket-stories/`.
+**Pocket Stories** is a static, client-side interactive fiction editor and player. No backend, no database. Stories are YAML files. The app deploys to GitHub Pages at `https://Jcube101.github.io/pocket-stories/`.
 
 ---
 
@@ -18,7 +21,7 @@ The app is deployed to GitHub Pages at `https://Jcube101.github.io/pocket-storie
 |---|---|
 | Framework | React 18 + TypeScript |
 | Build tool | Vite 5 |
-| Styling | Tailwind CSS 3 + custom CSS (`src/styles/global.css`) |
+| Styling | Tailwind CSS 3 + `src/styles/global.css` (1,553 lines) |
 | Animation | Framer Motion 11 |
 | Story format | YAML (parsed with the `yaml` package) |
 | State | React hooks + `localStorage` |
@@ -36,7 +39,7 @@ npm run preview      # preview production build locally
 npm run deploy       # build + push to gh-pages branch
 ```
 
-> Note: there are **no tests** in this project. No Vitest, no Jest, nothing configured. `npm test` will fail.
+**There are no tests.** `npm test` will fail. See roadmap P3-1 for the plan to add Vitest.
 
 ---
 
@@ -47,30 +50,28 @@ pocket-stories/
 ├── src/
 │   ├── App.tsx                  # Root component — global state, mode switching, story loading
 │   ├── main.tsx                 # React entry point
-│   ├── vite-env.d.ts
 │   ├── components/
-│   │   ├── PlayerView.tsx       # Interactive story player with animations (268 lines)
+│   │   ├── PlayerView.tsx       # Canonical interactive story player (268 lines)
 │   │   ├── StoryEditor.tsx      # Editor mode wrapper — dynamically loads legacy/editor.js
-│   │   ├── StoryList.tsx        # Story selector sidebar (32 lines)
-│   │   └── StoryPlayer.tsx      # Thin wrapper around PlayerView (12 lines)
+│   │   └── StoryList.tsx        # Story selector sidebar (32 lines)
+│   │   # NOTE: StoryPlayer.tsx is dead code — never rendered. See known-issues.md B5.
 │   ├── legacy/
-│   │   └── editor.js            # Main visual node-graph editor engine (2,967 lines, plain JS)
+│   │   └── editor.js            # Visual node-graph editor engine (2,967 lines, plain JS)
 │   ├── lib/
 │   │   ├── storyValidator.ts    # Validates + normalizes story YAML structure
 │   │   └── yamlLoader.ts        # Loads stories via import.meta.glob + parses raw YAML
 │   ├── stories/                 # YAML story sources (bundled with the app)
-│   │   ├── forest_adventure.yaml
-│   │   ├── city_noir.yaml
-│   │   ├── river_oath.yaml
-│   │   └── space_outpost.yaml
 │   └── styles/
-│       └── global.css           # CSS custom properties, theming, dark mode
+│       └── global.css           # All styles — monolithic, see known-issues.md S1
 ├── public/
 │   └── stories/                 # Static copies of YAML files (served as assets)
 ├── .github/workflows/
 │   └── deploy-gh-pages.yml      # CI: build + deploy on push to master
-├── index.html
-├── vite.config.ts               # base: '/pocket-stories/'
+├── spec.md                      # Product spec (source of truth)
+├── decisions.md                 # Architectural decisions log
+├── known-issues.md              # Bug tracker from initial audit
+├── roadmap.md                   # Phased development plan
+├── vite.config.ts               # base: '/pocket-stories/' — required for GitHub Pages
 ├── tailwind.config.js           # Custom player.* color/spacing/font tokens
 ├── tsconfig.json
 └── package.json
@@ -78,38 +79,60 @@ pocket-stories/
 
 ---
 
-## Application Architecture
+## Two Modes
 
-### Two Modes
+- **Editor mode** — `<StoryEditor>` dynamically imports `src/legacy/editor.js` (plain JS, SVG node-graph). Connected to React via `window.*` globals.
+- **Player mode** — `<PlayerView>` — typewriter text reveal, staggered choices, variable state, history.
 
-The app has two top-level modes toggled by a tab in the header:
+---
 
-- **Editor mode** — renders `<StoryEditor>`, which dynamically imports and mounts `src/legacy/editor.js` (a self-contained SVG node-graph editor written in plain JavaScript).
-- **Player mode** — renders `<PlayerView>`, a React component with typewriter text reveal, staggered choice animations, variable state management, and history tracking.
+## Known Bugs You Will Hit (read before touching anything)
 
-### State in `App.tsx`
+These are live bugs from the initial audit. They will affect you if you work in the relevant areas:
+
+| ID | Where | What breaks |
+|---|---|---|
+| B1 | `editor.js:1919` | "Export Story" crashes — `jsyaml` not imported (roadmap P1-1) |
+| B2 | `editor.js`, `StoryEditor.tsx` | Canvas goes dead after story switch; event listener memory leak (P1-2) |
+| B3 | `StoryEditor.tsx:40` | `initEditor()` fires on every parent render due to unstable dep (P1-3) |
+| B4 | `editor.js:780` | Undo/redo breaks after 20 actions (P1-6) |
+| B5 | `StoryPlayer.tsx` | Entire file is dead code — never rendered (P1-4) |
+| B9 | `PlayerView.tsx:80` | Conditions evaluated via `new Function()` — security gap (P2-2) |
+| B10 | `App.tsx`, `editor.js` | Editor edits don't appear in player mode — state not synced (P2-3) |
+
+Full list: `known-issues.md`
+
+---
+
+## State in `App.tsx`
 
 ```
 stories            — list of all available stories (built-in + imported)
 importedStories    — user-imported stories, persisted to localStorage
 mode               — 'editor' | 'player'
-story              — currently loaded StoryData object
+story              — currently loaded StoryData object (NOT updated by editor edits — see B10)
 activeStoryId      — ID of the loaded story
 pendingStoryId     — ID selected but not yet loaded
 loading / error    — async load state
 status             — status bar message
 ```
 
-### Window Bridge (App ↔ Legacy Editor)
+---
 
-`App.tsx` exposes several functions on `window` so the legacy editor can call back into React:
+## Window Bridge (React ↔ Legacy Editor)
+
+`App.tsx` and `StoryEditor.tsx` expose functions on `window` for the legacy editor to call back into React:
 
 ```ts
-window.validateAndNormalizeStory(raw)    // validate + normalize a YAML story
-window.parseStoryEffect(effect)          // parse a variable effect string
-window.registerImportedStoryEntry({id, label, raw, source})  // register a new imported story
-window.setAppMode('editor' | 'player')   // switch modes
-window.setSidebarCollapsed(bool)         // collapse the sidebar
+window.storyData                          // current story (mutable by editor — see B10)
+window.activeStoryId
+window.validateAndNormalizeStory(raw)     // validate + normalize a YAML story
+window.parseStoryEffect(effect)           // parse a variable effect string
+window.registerImportedStoryEntry({...})  // register a new imported story
+window.setAppMode('editor' | 'player')    // switch modes
+window.setStoryStatus(msg, type)
+window.loadStoryByPath(path, label)
+window.setSidebarCollapsed(bool)
 window.toggleSidebarCollapsed()
 ```
 
@@ -118,148 +141,114 @@ window.toggleSidebarCollapsed()
 ## Story Format (YAML)
 
 ```yaml
+title: "My Story"          # optional but should be set
 variables:
   inventory:
-    badge: false        # any primitive value
-    key: false
+    key: false             # any primitive
   relationships:
-    Guard: 0            # numeric only
+    Guard: 0               # numeric only; += and -= only
   flags:
-    door_open: false    # boolean only
+    door_open: false       # boolean only; = only
 
 passages:
   start:
     text: |
-      Opening narration here.
+      Opening text.
     choices:
-      - text: "Do something"
-        target: next_passage
-        effect: "inventory.badge = true"
-      - text: "Do something else"
-        target: another_passage
-        condition: "inventory.badge == true"
-
-  next_passage:
-    text: |
-      What happens next.
-    choices:
-      - text: "Continue"
-        target: ending
-
-  ending:
-    text: |
-      The end.
+      - text: "Use key"
+        target: unlocked
+        condition: "inventory.key == true"
+        effect: "flags.door_open = true"
+  unlocked:
+    text: The door opens.
 ```
 
-### Effect Syntax (validated by `storyValidator.ts`)
-
-- `inventory.x = value` — set any primitive
-- `relationships.x += N` or `-= N` — numeric adjustments only
-- `flags.x = true` or `= false` — boolean only
-
-### Conditions
-
-JavaScript expressions evaluated at runtime:
-- `inventory.badge == true`
-- `relationships.Guard > 2`
-- `flags.door_open`
-
-### Security Notes in Validator
-
-The validator blocks these variable name paths: `__proto__`, `prototype`, `constructor`.
+Conditions support: `==`, `!=`, `>=`, `<=`, `>`, `<`, `&&`, `||`, `!`. They are currently evaluated via `new Function()` — a known security issue (B9, roadmap P2-2).
 
 ---
 
-## Key Files to Know
+## Key Files
 
 ### `src/lib/storyValidator.ts`
-
-- `validateAndNormalizeStory(raw: string)` → `{ ok, data, warnings, errors }`
-- Normalizes variable categories (inventory/relationships/flags)
-- Returns a typed `StoryData` object on success
+- `validateAndNormalizeStory(input)` → `{ ok, data, warnings, errors }` — validates full story structure
+- `parseStoryEffect(effect)` → `{ ok, effect }` — parses a single effect string
+- **Warning:** `yamlLoader.ts` currently discards `warnings` — see B7
 
 ### `src/lib/yamlLoader.ts`
-
 - `getAvailableStories()` — discovers YAML files via `import.meta.glob('../stories/*.yaml')`
-- `loadStoryById(id: string)` — loads + validates a story by ID
-- `loadStoryFromRaw(yaml: string)` — parses + validates raw YAML
+- `loadStoryById(id)` — loads + validates by ID
+- `loadStoryFromRaw(yaml)` — parses + validates raw YAML string
 
 ### `src/components/PlayerView.tsx`
-
-Key behaviours:
-- Typewriter reveal: 58 characters/sec
-- Choice stagger: 85ms between buttons
-- Crossfade transition: 300ms
+- Typewriter: 58 chars/sec
+- Choice stagger: 85ms
+- Crossfade: 300ms
 - Respects `prefers-reduced-motion`
-- Variable state stored in React state (`inventory`, `relationships`, `flags`)
-- History array tracked for breadcrumbs/restart
+- `evalCondition`: uses `new Function()` — see B9
+- `applyEffect`: silently ignores failures — see B8
 
 ### `src/legacy/editor.js`
-
-2,967 lines of plain JavaScript. Self-initialising. Provides:
-- SVG canvas node-graph for story structure
-- Three view modes: Author, Logic, Playtest
-- Diagnostics, undo/redo, cycle detection, unreachable node detection
-- Export, import, search, node inspector
-- Calls `window.validateAndNormalizeStory` and `window.registerImportedStoryEntry`
+- 2,967 lines of plain JS. Initialized via `initEditor()`, exported as named ES export.
+- Has **no cleanup function** (yet) — see B2. Adding `destroyEditor()` is roadmap P1-2.
+- Calls `window.validateAndNormalizeStory`, `window.registerImportedStoryEntry`, `window.setStoryStatus`, etc.
+- `jsyaml.dump()` / `jsyaml.load()` calls are broken — see B1.
 
 ---
 
-## Styling System
+## Styling
 
-### Tailwind Custom Tokens (`tailwind.config.js`)
-
+### Tailwind custom tokens (`tailwind.config.js`)
 ```
-colors:     player.bg, player.surface, player.text, player.muted, player.accent, player.accent-hover, player.border, player.error
-spacing:    playerXs, playerSm, playerMd, playerLg, playerXl
-fonts:      playerSans, playerSerif
-radius:     player
-shadow:     player
+colors:   player.bg, player.surface, player.text, player.muted, player.accent, player.border, player.error
+spacing:  playerXs, playerSm, playerMd, playerLg, playerXl
+fonts:    playerSans, playerSerif
 ```
 
-### CSS Custom Properties (`src/styles/global.css`)
+### CSS custom properties (`src/styles/global.css`)
+`--player-bg`, `--player-text`, `--player-accent`, etc. Dark mode via `@media (prefers-color-scheme: dark)`.
 
-Variables like `--player-bg`, `--player-text`, `--player-accent`, etc. are defined here, with dark mode overrides via `@media (prefers-color-scheme: dark)`.
+**Tailwind-first rule:** New React components should use Tailwind utilities, not add to `global.css`. See `decisions.md` Decision 4. Editor graph styles (`#nodes-container`, `.node`, `#svg-canvas`) must stay global.
 
 ---
 
-## localStorage
+## localStorage Keys
 
 | Key | Contents |
 |---|---|
-| `pocket_stories_imported_entries_v1` | JSON array of `{ id, label, raw, source }` user-imported stories |
+| `pocket_stories_imported_entries_v1` | JSON array of `{ id, label, raw, source }` |
+| `pocketstories_layout_<hash>` | Canvas node positions for editor |
+| `pocketstories_layout_<hash>_ui` | Editor UI state (collapsed nodes, view mode) |
 
 ---
 
 ## CI/CD
 
-- **File:** `.github/workflows/deploy-gh-pages.yml`
-- **Trigger:** push to `master`
-- **Steps:** checkout → Node 20 → `npm install` → `npm run build` → deploy `./dist` to GitHub Pages
-- **Token:** uses `GITHUB_TOKEN`
+- Trigger: push to `master`
+- Steps: Node 20 → `npm install` → `npm run build` → deploy `./dist` to GitHub Pages
+- Token: `GITHUB_TOKEN`
 
 ---
 
 ## Development Branch Convention
 
-Branches follow the pattern `claude/<task-slug>-<session-id>`. Always push to the branch specified for the task. Never push to `master` directly.
+Branches follow `claude/<task-slug>-<session-id>`. Always push to the branch specified. Never push to `master` directly.
 
 ---
 
-## Gotchas & Notes from Prior Work
+## Important Gotchas
 
-1. **No tests exist.** Don't try to run them. If you add tests, set up Vitest (it's already a Vite project — natural fit).
+1. **`StoryPlayer.tsx` is dead code.** Do not use it. `PlayerView.tsx` is the canonical player component.
 
-2. **`src/legacy/editor.js` is plain JavaScript**, not TypeScript. `StoryEditor.tsx` imports it dynamically with `import()`. Do not convert it to TS unless specifically asked.
+2. **`editor.js` is plain JS**, not TypeScript. Don't convert unless explicitly asked. It's imported via dynamic `import()` from `StoryEditor.tsx`.
 
-3. **Vite base path is `/pocket-stories/`** — required for GitHub Pages. Don't remove it.
+3. **Vite base path `/pocket-stories/`** is required for GitHub Pages. Do not remove it.
 
-4. **`import.meta.glob` in `yamlLoader.ts`** only picks up files in `src/stories/`. Adding a new story means adding a `.yaml` file there (and optionally to `public/stories/` for static serving).
+4. **Adding a built-in story** means adding a `.yaml` file to `src/stories/`. The `import.meta.glob` in `yamlLoader.ts` picks it up automatically.
 
-5. **Window bridge is fragile.** The functions registered on `window` in `App.tsx` are React-effect-bound with cleanup. Be careful when refactoring those effects — effects that register `registerImportedStoryEntry` have `stories` in their dependency array on purpose.
+5. **The window bridge is fragile.** Effects that register `window.registerImportedStoryEntry` have `stories` in their dependency array on purpose — this keeps the registered function's closure up to date.
 
-6. **Framer Motion `AnimatePresence`** is used in `PlayerView.tsx` for passage transitions. If you add new animated sections, follow the existing `key`-based exit/enter pattern.
+6. **Editor edits are not reflected in player mode** until the story is re-loaded (B10). This is a known architectural gap, not a bug to work around.
 
-7. **Prior Codex work** introduced Tailwind, Framer Motion, `PlayerView`, and the animated passage reveal. All Codex-generated commits are identifiable by branch names like `codex/…`.
+7. **Prior Codex commits** are identifiable by branch names like `codex/…`. Recent ones introduced Tailwind, Framer Motion, `PlayerView`, and animated passage reveal.
 
-8. **Dark mode** is CSS-only via `@media (prefers-color-scheme: dark)`. There is no manual theme toggle in the UI.
+8. **Dark mode is CSS-only** (`@media (prefers-color-scheme: dark)`). No in-app toggle yet (roadmap P3-3).
