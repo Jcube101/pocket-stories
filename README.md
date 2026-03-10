@@ -1,75 +1,123 @@
-# Pocket Stories (Vite + React + TypeScript)
+# Pocket Stories
 
-Pocket Stories is now a Vite-powered React 18 + TypeScript app with tabs for **Editor** and **Player** mode.
+A browser-only interactive fiction editor and player. Create branching narrative stories in YAML, play them with animated transitions, and edit them in a visual node-graph editor. No backend, no accounts — everything runs in the browser and deploys as a static site.
+
+**Live app:** https://Jcube101.github.io/pocket-stories/
+
+---
 
 ## Quickstart
 
 ```bash
 npm install
-npm run dev
-npm run build
-npm run deploy
+npm run dev       # http://localhost:5173/pocket-stories/
+npm run build     # production build → ./dist
+npm run deploy    # build + deploy to GitHub Pages
 ```
 
-Open `http://localhost:5173`.
+> There are no tests yet. `npm test` will fail. See `roadmap.md` for plans to add Vitest.
 
-## Commands
+---
 
-- `npm install` — install dependencies.
-- `npm run dev` — start the local Vite development server.
-- `npm run build` — create a production build.
-- `npm run deploy` — deploy to GitHub Pages.
+## Two modes
 
-## New Structure
+**Editor** — Visual SVG node-graph editor. Each passage is a node. Connect them with choices. Export your story as YAML.
 
-```text
-pocket-stories/
-├── legacy/                     # archived pre-Vite app files
-│   ├── demo.html
-│   ├── editor.js
-│   ├── player.js
-│   ├── story-validation.js
-│   └── style.css
-├── public/
-│   └── stories/                 # static YAML copies for easy hosting/export
-├── src/
-│   ├── components/
-│   │   ├── StoryEditor.tsx
-│   │   ├── StoryList.tsx
-│   │   └── StoryPlayer.tsx
-│   ├── legacy/
-│   │   └── editor.js            # existing editor core logic, integrated in React
-│   ├── lib/
-│   │   ├── storyValidator.ts
-│   │   └── yamlLoader.ts
-│   ├── stories/                 # YAML source set used by import.meta.glob
-│   ├── styles/
-│   │   └── global.css
-│   ├── App.tsx
-│   └── main.tsx
-├── stories/                     # original YAML files kept intact
-├── index.html
-├── package.json
-├── tsconfig.json
-└── vite.config.ts
+**Player** — Animated story reader with typewriter text reveal, staggered choice buttons, and variable state tracking (inventory, relationships, flags).
+
+---
+
+## Story format
+
+Stories are YAML files with passages, choices, conditions, and effects:
+
+```yaml
+title: "My Story"
+
+variables:
+  inventory:
+    key: false
+  relationships:
+    Guard: 0         # numeric; use += or -=
+  flags:
+    door_open: false # boolean; use = true/false
+
+passages:
+  start:
+    text: |
+      You stand before a locked door.
+    choices:
+      - text: "Use the key"
+        target: open
+        condition: "inventory.key == true"
+        effect: "flags.door_open = true"
+      - text: "Walk away"
+        target: end
+
+  open:
+    text: The door swings open.
+
+  end:
+    text: You leave.
 ```
 
-## Notes
+Conditions support `==`, `!=`, `>=`, `<=`, `>`, `<`, `&&`, `||`, `!`.
 
-- Existing YAML stories were **not deleted**.
-- YAML story files remain in place in `stories/`, `public/stories/`, and `src/stories/`.
-- Story loading is dynamic via `import.meta.glob`.
-- `story-validation.js` logic is migrated into typed `src/lib/storyValidator.ts`.
-- Player logic is now in `StoryPlayer.tsx` with loading/error states.
-- Editor UI is rendered by React (`StoryEditor.tsx`) and reuses the legacy editor engine (`src/legacy/editor.js`) for minimal-risk migration.
-- Responsive defaults are mobile-first with touch-friendly button sizing (44px min target).
-- GitHub Pages deploy uses the `/pocket-stories/` base path configured in `vite.config.ts`.
+Effects: `inventory.x = value`, `relationships.x += N`, `flags.x = true/false`.
 
-## Story URLs
+---
 
-You can keep stories in both:
-- `src/stories/` (for dynamic module loading)
-- `public/stories/` (for static file serving)
-- `stories/` (original YAML source archive retained during migration)
+## Project docs
 
-This dual setup keeps migration safe while preserving your original content.
+| File | Contents |
+|---|---|
+| `spec.md` | What the app is, who it's for, all core behaviors |
+| `decisions.md` | Architectural choices and rationale (read before making structural changes) |
+| `known-issues.md` | Bugs found in the initial audit — read before touching the editor or player |
+| `roadmap.md` | Phased plan for stabilization and new features |
+| `CLAUDE.md` | Quick-start for AI coding assistants |
+
+---
+
+## Repository layout
+
+```
+src/
+  App.tsx              — Root component, all global state
+  components/
+    PlayerView.tsx     — Story player (canonical)
+    StoryEditor.tsx    — React shell for the legacy editor
+    StoryList.tsx      — Story selector
+  legacy/
+    editor.js          — Node-graph editor engine (2,967 lines, plain JS)
+  lib/
+    storyValidator.ts  — Validates + normalizes YAML story structure
+    yamlLoader.ts      — Loads stories via import.meta.glob
+  stories/             — Built-in YAML stories (loaded at build time)
+  styles/
+    global.css         — All styles (Tailwind + custom CSS)
+public/
+  stories/             — Static copies of built-in stories
+```
+
+---
+
+## Adding a story
+
+Drop a `.yaml` file into `src/stories/`. The app picks it up automatically via `import.meta.glob`. Optionally copy it to `public/stories/` for direct URL access.
+
+---
+
+## Known issues
+
+The codebase has several live bugs from a prior migration. Read `known-issues.md` before working on the editor or player. The most impactful:
+
+- **Editor export crashes** — `js-yaml` is not installed (roadmap P1-1)
+- **Editor canvas goes dead after story switch** — event listener cleanup is missing (P1-2)
+- **Editor edits don't appear in player mode** — state sync not implemented (P2-3)
+
+---
+
+## Tech stack
+
+React 18 · TypeScript · Vite 5 · Tailwind CSS 3 · Framer Motion 11 · YAML · GitHub Pages
