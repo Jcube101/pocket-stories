@@ -1,6 +1,6 @@
 # Pocket Stories — Known Issues
 
-Bugs and gaps found during the initial codebase audit (2026-03-10). Updated 2026-03-18 after Phase 1 and Phase 2 completion. Each item links to the relevant roadmap item in `roadmap.md`.
+Bugs and gaps found during the initial codebase audit (2026-03-10). Updated 2026-03-18 after all three phases complete. Each item links to the relevant roadmap item in `roadmap.md`.
 
 **Status key:** ✅ Fixed | 🔴 Open
 
@@ -72,24 +72,21 @@ Bugs and gaps found during the initial codebase audit (2026-03-10). Updated 2026
 
 ## Configuration and tooling gaps
 
-### C1 — No test infrastructure 🔴 Open
-**Roadmap:** P3-1
-`npm test` fails. Zero test coverage across all modules.
-**Impact:** Refactoring of `storyValidator.ts`, `yamlLoader.ts`, `conditionEvaluator.ts`, or `PlayerView.tsx` logic done without a safety net.
+### C1 — No test infrastructure ✅ Fixed (P3-1)
+~~`npm test` fails. Zero test coverage across all modules.~~
+**Fix:** Vitest installed; `conditionEvaluator.test.ts` and `storyValidator.test.ts` written; `npm test` passes.
 
 ### C2 — No GitHub Pages 404 fallback ✅ Fixed (P2-8)
 ~~Bookmarked or shared direct URLs returned a GitHub Pages 404 before React loaded.~~
 **Fix:** `public/404.html` added with SPA redirect script; `index.html` has path restoration script.
 
-### C3 — Vite base path is hardcoded 🔴 Open
-**Roadmap:** P3-6
-**File:** `vite.config.ts:5`
-`base: '/pocket-stories/'` is a string literal. Breaks on fork or rename without manual edit.
+### C3 — Vite base path is hardcoded ✅ Fixed (P3-6)
+~~`base: '/pocket-stories/'` is a string literal. Breaks on fork or rename without manual edit.~~
+**Fix:** `vite.config.ts` now uses `process.env.VITE_BASE_PATH ?? '/pocket-stories/'`; `.env.example` added.
 
-### C4 — `tsconfig.json` uses deprecated `moduleResolution` casing 🔴 Open
-**Roadmap:** P3-7
-**File:** `tsconfig.json`
-`"moduleResolution": "Bundler"` — should be lowercase `"bundler"`. No runtime impact today.
+### C4 — `tsconfig.json` uses deprecated `moduleResolution` casing ✅ Fixed (P3-7)
+~~`"moduleResolution": "Bundler"` — should be lowercase `"bundler"`. No runtime impact today.~~
+**Fix:** Changed to `"bundler"`.
 
 ### C5 — `StoryEditor.tsx` dynamic import has no error handler ✅ Fixed (P1-5)
 ~~Load failure produced a blank, silent canvas with no message.~~
@@ -99,19 +96,13 @@ Bugs and gaps found during the initial codebase audit (2026-03-10). Updated 2026
 
 ## Story YAML quality issues
 
-### Y1 — Unused variables declared in built-in stories 🔴 Open
-**Roadmap:** P3-5
-| Story | Variable | Issue |
-|---|---|---|
-| `forest_adventure.yaml` | `sword` | Declared, never set or read |
-| `forest_adventure.yaml` | `dragon_scale` | Declared, never set or read |
-| `river_oath.yaml` | `crossed_river` | Declared, never set or used |
-| `city_noir.yaml` | `bribed_guard` | Set (line 30) but never checked by any condition |
+### Y1 — Unused variables declared in built-in stories ✅ Fixed (P3-5)
+~~Four variables declared across three stories were never meaningfully used.~~
+**Fix:** Removed `sword` and `dragon_scale` from `forest_adventure.yaml`; removed `crossed_river` from `river_oath.yaml`; removed `bribed_guard` variable and its effect assignment from `city_noir.yaml`.
 
-### Y2 — Compound condition syntax undocumented 🔴 Open (partially resolved)
-**Roadmap:** P3-5
-**File:** `src/stories/river_oath.yaml:79`
-`condition: "inventory.lantern == true && relationships.Ferryman >= 1"` — now verified to work with the new safe evaluator (P2-2 used `&&` / `||` support). Document in spec.md.
+### Y2 — Compound condition syntax ✅ Resolved (P2-2, P3-5)
+~~Compound conditions undocumented.~~
+**Fix:** `&&` / `||` / `!` fully supported by `conditionEvaluator.ts` (P2-2). Story YAML cleanup done (P3-5). Compound condition in `river_oath.yaml` verified working.
 
 ### Y3 — Redundant condition in `space_outpost.yaml` 🔴 Open
 **File:** `src/stories/space_outpost.yaml:75`
@@ -121,13 +112,12 @@ Bugs and gaps found during the initial codebase audit (2026-03-10). Updated 2026
 
 ## CSS maintainability
 
-### S1 — `global.css` is monolithic and unscoped 🔴 Open
-**Roadmap:** P3-2
-**File:** `src/styles/global.css`
-~1,553 lines mixing editor graph styles, player styles, sidebar rules, dark mode overrides, and responsive breakpoints. Class names tightly coupled to legacy editor DOM IDs.
+### S1 — `global.css` is monolithic and unscoped ✅ Fixed (P3-2)
+~~1,553-line monolithic CSS file.~~
+**Fix:** Split into `base.css` (resets), `editor-graph.css` (editor/canvas), `player.css` (React player + CSS custom properties). `global.css` now just `@tailwind` + `@import` + theme overrides.
 
 ---
 
 ## Audit methodology note
 
-Initial issue list produced by full static analysis in March 2026. Updated after Phase 1 (P1) and Phase 2 (P2) completion. Issues numbered by category prefix (B = blocking/broken, U = UX, C = config/tooling, Y = YAML quality, S = styles). Original line numbers referenced the state at commit `f879a6d`.
+Initial issue list produced by full static analysis in March 2026. Updated after all three phases (P1, P2, P3) completion. Issues numbered by category prefix (B = blocking/broken, U = UX, C = config/tooling, Y = YAML quality, S = styles). Original line numbers referenced the state at commit `f879a6d`.

@@ -21,7 +21,7 @@ Quick-start orientation for working on this project. For deeper context, read th
 |---|---|
 | Framework | React 18 + TypeScript |
 | Build tool | Vite 5 |
-| Styling | Tailwind CSS 3 + `src/styles/global.css` (1,553 lines) |
+| Styling | Tailwind CSS 3 + `src/styles/{base,editor-graph,player}.css` |
 | Animation | Framer Motion 11 |
 | Story format | YAML (parsed with the `yaml` package) |
 | State | React hooks + `localStorage` |
@@ -89,17 +89,9 @@ pocket-stories/
 
 ## Known Issues
 
-Phase 1 and Phase 2 bugs are all fixed. Remaining open issues are Phase 3 polish items:
+All Phase 1, 2, and 3 items are complete. No open tracked issues remain.
 
-| ID | Where | What |
-|---|---|---|
-| C1 | — | No test infrastructure (`npm test` fails) — roadmap P3-1 |
-| C3 | `vite.config.ts:5` | Hardcoded base path breaks on fork/rename — roadmap P3-6 |
-| C4 | `tsconfig.json` | Deprecated `"Bundler"` casing, harmless — roadmap P3-7 |
-| S1 | `src/styles/global.css` | Monolithic 1,553-line CSS — roadmap P3-2 |
-| Y1 | `src/stories/*.yaml` | Unused variables in built-in stories — roadmap P3-5 |
-
-Full list with history: `known-issues.md`
+Full history: `known-issues.md`
 
 ---
 
@@ -214,7 +206,7 @@ fonts:    playerSans, playerSerif
 ### CSS custom properties (`src/styles/global.css`)
 `--player-bg`, `--player-text`, `--player-accent`, etc. Dark mode via `@media (prefers-color-scheme: dark)`.
 
-**Tailwind-first rule:** New React components should use Tailwind utilities, not add to `global.css`. See `decisions.md` Decision 4. Editor graph styles (`#nodes-container`, `.node`, `#svg-canvas`) must stay global.
+**Tailwind-first rule:** New React components should use Tailwind utilities, not add to CSS files. See `decisions.md` Decision 4. Editor graph styles (`#nodes-container`, `.node`, `#svg-canvas`) must stay in `editor-graph.css`.
 
 ---
 
@@ -260,4 +252,4 @@ Branches follow `claude/<task-slug>-<session-id>`. Always push to the branch spe
 
 8. **Prior Codex commits** are identifiable by branch names like `codex/…`. Recent ones introduced Tailwind, Framer Motion, `PlayerView`, and animated passage reveal.
 
-9. **Dark mode is CSS-only** (`@media (prefers-color-scheme: dark)`). No in-app toggle yet (roadmap P3-3).
+9. **Dark mode toggle** — `App.tsx` cycles `theme` state (auto/dark/light), writes `data-theme` to `<html>`. CSS handles the rest via `html[data-theme="dark"]` / `html[data-theme="light"]` overrides in `global.css`. Persisted to `localStorage` key `pocket_stories_theme_v1`.

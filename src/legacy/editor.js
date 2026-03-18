@@ -1,5 +1,31 @@
 import jsyaml from 'js-yaml';
-// editor.js — minimal SVG + DOM graph editor for Pocket Stories
+/**
+ * editor.js — visual SVG node-graph editor for Pocket Stories (~3,000 lines)
+ *
+ * Module seams (see src/editor/types.ts for the migration plan):
+ *   DATA MODEL        ~3–38    State variables, flags, highlight sets
+ *   CONSTANTS         ~39–118  NODE_VARIANTS, VIEW_MODES, EDGE_TYPES, RISK_TOKENS
+ *   PERSISTENCE       ~119–226 localStorage read/write for layout + UI state
+ *   GRAPH MODEL       ~227–565 Edge/layer/adjacency graph utilities
+ *   RENDERING/NODES   ~566–762 Node card, inspector, variant helpers
+ *   HISTORY           ~762–793 saveState(), MAX_HISTORY
+ *   INIT              ~794–1108 initEditor(), bindToolbarEvents()
+ *   EVENT HANDLING    ~1109–1214 bindEditorEvents(), destroyEditor()
+ *   CANVAS            ~1215–1378 Transform, zoom, edge detail
+ *   RENDERING/EDGES   ~1379–1600 buildEdgePath(), drawConnections()
+ *   LAYOUT            ~1601–1785 View mode, collapse, auto-layout, fit/jump
+ *   SIDEBAR PANELS    ~1786–1898 Passage list, variable panel
+ *   EXPORT/IMPORT     ~1899–2034 exportYAML(), generateBranchingScript()
+ *   MODAL             ~2035–2124 showModal() + dialog HTML
+ *   DOWNSTREAM        ~2125–2330 Downstream highlight, focus node
+ *   DIAGNOSTICS       ~2331–2692 Analyzers, autofix, validation panel
+ *   UNDO/REDO         ~2693–2800 undo(), redo(), applyStateIncremental()
+ *   BOOTSTRAP         ~2800–3000 Module-level bindings (sampleStory, addVar, help)
+ */
+
+// ============================================================
+// DATA MODEL — module-level mutable state
+// ============================================================
 let nodesContainer;
 let svgCanvas;
 let variables = { inventory: {}, relationships: {}, flags: {} };
@@ -36,6 +62,9 @@ let hoveredNodeId = null;
 let downstreamHighlight = { nodes: new Set(), edges: new Set() };
 let highlightFullDownstream = false;
 
+// ============================================================
+// CONSTANTS
+// ============================================================
 const EDGE_DETAIL_LEVELS = {
     HIDE_LABELS: 0.75,
     SHOW_LABELS: 0.95
@@ -116,6 +145,9 @@ const VIEW_MODE_PRESETS = {
     }
 };
 
+// ============================================================
+// PERSISTENCE — localStorage read/write for layout + UI state
+// ============================================================
 function normalizeStorageToken(value) {
     return String(value || '')
         .trim()
@@ -225,6 +257,9 @@ function isNodeManuallyPositioned(passage, layoutEntry) {
     return Boolean(layoutEntry?.manualOverride || passage?.position?.manualOverride === true);
 }
 
+// ============================================================
+// GRAPH MODEL — edge/layer/adjacency utilities
+// ============================================================
 function classifyEdgeType(fromId, toId, choice, layerById) {
     if (choice.edgeType && Object.values(EDGE_TYPES).includes(choice.edgeType)) {
         return choice.edgeType;
@@ -765,6 +800,9 @@ function cloneEditorState() {
     };
 }
 
+// ============================================================
+// HISTORY — undo/redo stack (saveState, MAX_HISTORY = 20)
+// ============================================================
 function saveState(options = {}) {
     if (options.resetHistory) {
         undoStack = [];
@@ -1106,6 +1144,9 @@ function requestPlayerMode(sourceLabel = 'Editor') {
     return false;
 }
 
+// ============================================================
+// EVENT HANDLING — bindEditorEvents(), destroyEditor()
+// ============================================================
 function bindEditorEvents() {
     if (editorEventsBound) return;
 
@@ -1423,6 +1464,9 @@ function applyEdgeValidationClasses(path, edgeKey, connId) {
     }
 }
 
+// ============================================================
+// RENDERING/EDGES — buildEdgePath(), drawConnections()
+// ============================================================
 function drawConnections() {
     svgCanvas.innerHTML = `<defs>
         <marker id="arrow" markerWidth="11" markerHeight="11" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
@@ -1664,6 +1708,9 @@ function expandNodesInViewport() {
     }
 }
 
+// ============================================================
+// LAYOUT — view mode, collapse, auto-layout, zoom, fit/jump
+// ============================================================
 function applyAutoLayout() {
     const autoPositions = runLayeredAutoLayout(window.storyData.passages || {});
     Object.entries(autoPositions).forEach(([id, pos]) => {
@@ -1783,6 +1830,9 @@ function fitToNodes() {
     focusBounds(minX, minY, maxX, maxY);
 }
 
+// ============================================================
+// SIDEBAR PANELS — passage list, variable panel
+// ============================================================
 function renderPassageList() {
     const list = document.getElementById('passage-list');
     if (!list) return;
@@ -1896,6 +1946,9 @@ function getCategoryTooltip(cat) {
     if (cat === 'flags') return 'Boolean toggles (e.g., met_guard: true). Use in effects: flags.met_guard = true';
 }
 
+// ============================================================
+// EXPORT/IMPORT — exportYAML(), generateBranchingScript()
+// ============================================================
 function exportStoryDataFromGraph() {
     if (!window.storyData || !inspectorEls) return;
 
@@ -2032,6 +2085,9 @@ function sanitizeHTML(html) {
     return template.innerHTML;
 }
 
+// ============================================================
+// MODAL — showModal() dialog system
+// ============================================================
 function showModal(content) {
     const overlay = document.createElement('div');
     overlay.style.position = 'fixed';
@@ -2448,6 +2504,9 @@ function runGraphAnalyzers(passages) {
     return { unreachableNodes, noExitNodes, danglingRefs, danglingNodes, cycles, cycleNodes, cycleEdges };
 }
 
+// ============================================================
+// DIAGNOSTICS — analyzers, autofix, validation panel
+// ============================================================
 function validateStory(options = {}) {
     const showModalReport = options.showModalReport !== false;
     const issues = [];
@@ -2690,6 +2749,9 @@ function expandCanvasIfNeeded() {
     }
 }
 
+// ============================================================
+// UNDO/REDO — undo(), redo(), applyStateIncremental()
+// ============================================================
 function undo() {
     if (historyIndex <= 0) return;
     historyIndex -= 1;

@@ -4,8 +4,7 @@ variables:
     evidence: false
   relationships:
     Informant: 0
-  flags:
-    bribed_guard: false
+  flags: {}
 
 passages:
   start:
@@ -27,7 +26,6 @@ passages:
         condition: "inventory.badge == true"
       - text: "Slip him cash"
         target: club_floor
-        effect: "flags.bribed_guard = true"
 
   alley:
     text: |

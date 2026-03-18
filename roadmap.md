@@ -1,6 +1,6 @@
 # Pocket Stories — Development Roadmap
 
-Last updated: 2026-03-18. Phase 1 and Phase 2 complete. See `known-issues.md` for the full bug list and `decisions.md` for the architectural choices that shape this plan.
+Last updated: 2026-03-18. All three phases complete. See `known-issues.md` for the full bug list and `decisions.md` for the architectural choices that shape this plan.
 
 ---
 
@@ -85,62 +85,53 @@ All Phase 2 items were implemented and merged (branch `claude/create-claude-md-Z
 
 ---
 
-## Phase 3 — Polish and Scale
+## Phase 3 — Polish and Scale ✅ COMPLETE
 
-Nice-to-haves and maintainability improvements. None are blockers, but several compound in value as the project grows.
+All Phase 3 items implemented (branch `claude/create-claude-md-ZAKIr`, 2026-03-18).
 
-### P3-1 ★ Add test infrastructure (Vitest)
+### P3-1 ★ Add test infrastructure (Vitest) — *DONE*
 
-Zero test coverage. `storyValidator.ts` is the highest-value first target — pure logic, well-defined inputs and outputs.
+- `vitest` added to devDependencies; `vitest.config.ts` created
+- `src/lib/conditionEvaluator.test.ts` — full coverage of tokenizer, parser, all operators, edge cases
+- `src/lib/storyValidator.test.ts` — validates story structure, effect parsing, condition syntax
 
-- Add `vitest` + `@testing-library/react` to devDependencies
-- Write unit tests for: `storyValidator.ts` (all branches), `conditionEvaluator.ts`, `yamlLoader.ts`, `applyEffect` logic
-- Files: `package.json`, `vitest.config.ts` (new), `src/lib/*.test.ts` (new)
+### P3-2 ★ Refactor `global.css` into scoped files — *DONE*
 
-### P3-2 ★ Refactor `global.css` into scoped files
+- `src/styles/base.css` — resets, body, h1, basic HTML elements
+- `src/styles/editor-graph.css` — legacy editor: sidebar, canvas, nodes, connections, SVG
+- `src/styles/player.css` — CSS custom properties, app-shell, player layout, animations
+- `global.css` now just `@tailwind` directives + `@import` statements + theme overrides
 
-1,553 lines mixing editor graph styles, player styles, sidebar rules, and dark mode. Class names are coupled to legacy editor DOM IDs.
+### P3-3 ★ Add manual dark mode toggle — *DONE*
 
-- Split into: `editor-graph.css` (legacy editor styles, kept flat), `player.css`, `base.css` (resets + CSS custom properties)
-- Migrate new React component styles to Tailwind utility classes
-- Files: `src/styles/global.css`, component files
+- `App.tsx`: `theme` state (auto/dark/light), persisted to `localStorage`
+- `document.documentElement.dataset.theme` updated on change
+- Header toggle button cycles: ⚙️ Auto → 🌙 Dark → ☀️ Light → ⚙️ Auto
+- CSS: `html[data-theme="dark"]` and `html[data-theme="light"]` overrides in `global.css`
+  covering both CSS custom property layer (player UI) and legacy editor element colors
 
-### P3-3 ★ Add manual dark mode toggle
+### P3-4 Modularize `editor.js` (incremental) — *DONE*
 
-Dark mode is CSS-only via `@media (prefers-color-scheme: dark)`. No in-app toggle.
+- `src/editor/types.ts` — TypeScript interfaces for `EditorUiState`, `HistoryEntry`, `CanvasViewMode`, module seam map
+- `src/editor/index.ts` — public API barrel, documents migration path
+- `src/legacy/editor.js` — 11 section header comments marking module boundaries:
+  DATA MODEL / CONSTANTS / PERSISTENCE / GRAPH MODEL / HISTORY / EVENT HANDLING /
+  RENDERING/EDGES / LAYOUT / SIDEBAR PANELS / EXPORT/IMPORT / MODAL / DIAGNOSTICS / UNDO/REDO
 
-- Add `darkMode` state to `App.tsx`; apply `data-theme="dark"` to `<html>`
-- Update CSS selectors to use `[data-theme="dark"]` in addition to the media query
-- Persist preference to `localStorage`; add toggle button to header
-- Files: `src/App.tsx`, `src/styles/global.css`
+### P3-5 Clean up unused story variables — *DONE*
 
-### P3-4 Modularize `editor.js` (incremental)
+- `forest_adventure.yaml`: removed `sword` and `dragon_scale` from inventory
+- `river_oath.yaml`: removed `crossed_river` from flags (empty `flags: {}`)
+- `city_noir.yaml`: removed `bribed_guard` from flags and removed its `effect` assignment
 
-Seal `editor.js` for Phase 2 (bug fixes only). In Phase 3, extract natural module seams (data model, node rendering, edge rendering, event handling, serialization, undo-redo) into TypeScript files under `src/editor/`. Do not rewrite behavior — restructure only. Requires P3-1 test coverage as a safety net.
-
-- Files: `src/legacy/editor.js` → `src/editor/` (new directory)
-
-### P3-5 Clean up unused story variables
-
-Four variables declared across three stories are never meaningfully used. They create noise and will produce false positives from any future static analysis.
-
-- `forest_adventure.yaml`: remove or use `sword`, `dragon_scale`
-- `river_oath.yaml`: remove or use `crossed_river`; note: `bribed_guard` in `city_noir.yaml` is set but never checked — add a condition or remove it
-- Document the compound condition syntax used in `river_oath.yaml` line 79
-- Files: `src/stories/*.yaml`
-
-### P3-6 Make Vite base path configurable
-
-`base: '/pocket-stories/'` is hardcoded. Breaks on rename, fork, or custom domain without a manual config edit.
+### P3-6 Make Vite base path configurable — *DONE*
 
 - `vite.config.ts`: `base: process.env.VITE_BASE_PATH ?? '/pocket-stories/'`
-- Files: `vite.config.ts`, `.env.example` (new)
+- `.env.example` created with documentation
 
-### P3-7 Fix `tsconfig.json` `moduleResolution` casing
+### P3-7 Fix `tsconfig.json` `moduleResolution` casing — *DONE*
 
-`"Bundler"` → `"bundler"` (deprecated capitalization, harmless today).
-
-- Files: `tsconfig.json`
+- `"Bundler"` → `"bundler"`
 
 ---
 
