@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { StoryEditor } from './components/StoryEditor';
 import { StoryList } from './components/StoryList';
 import { PlayerView } from './components/PlayerView';
@@ -140,14 +140,19 @@ export default function App() {
     };
   }, []);
 
-  const setStoryStatus = (message: string, type = 'info') => setStatus({ message, type });
+  const setStoryStatus = useCallback((message: string, type = 'info') => setStatus({ message, type }), []);
 
-  const onLoadStoryByPath = async (path: string, label = path) => {
+  // Keep a ref to the latest loadStory so onLoadStoryByPath doesn't change identity
+  // when importedStories changes (which would re-trigger the editor effect unnecessarily).
+  const loadStoryRef = useRef(loadStory);
+  useEffect(() => { loadStoryRef.current = loadStory; });
+
+  const onLoadStoryByPath = useCallback(async (path: string, label = path) => {
     const id = normalizeStoryId(path.split('/').pop() || activeStoryId);
     setPendingStoryId(id);
-    await loadStory(id);
+    await loadStoryRef.current(id);
     setStatus({ message: `Loaded: ${label}`, type: 'success' });
-  };
+  }, [activeStoryId]);
 
   const onLoadSelectedStory = async () => {
     if (!pendingStoryId || pendingStoryId === activeStoryId) return;

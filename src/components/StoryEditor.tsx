@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { StoryData } from '../lib/storyValidator';
 
 type Props = {
@@ -10,6 +10,7 @@ type Props = {
 
 export function StoryEditor({ story, activeStoryId, setStoryStatus, onLoadStoryByPath }: Props) {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const destroyRef = useRef<(() => void) | undefined>(undefined);
 
   useEffect(() => {
     (window as any).setSidebarCollapsed = (collapsed: boolean) => {
@@ -34,9 +35,23 @@ export function StoryEditor({ story, activeStoryId, setStoryStatus, onLoadStoryB
     (window as any).validateAndNormalizeStory ??= () => ({ ok: true, data: (window as any).storyData, warnings: [], errors: [] });
     (window as any).parseStoryEffect ??= () => ({ ok: true });
 
+    let cancelled = false;
     import('../legacy/editor.js').then((mod) => {
+      if (cancelled) return;
       mod.initEditor();
+      destroyRef.current = mod.destroyEditor;
+    }).catch((err) => {
+      if (!cancelled) {
+        console.error('Failed to load editor:', err);
+        setStoryStatus('Editor failed to load. Check the console for details.', 'error');
+      }
     });
+
+    return () => {
+      cancelled = true;
+      destroyRef.current?.();
+      destroyRef.current = undefined;
+    };
   }, [story, activeStoryId, setStoryStatus, onLoadStoryByPath]);
 
   return (
