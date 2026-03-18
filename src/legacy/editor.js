@@ -1,3 +1,4 @@
+import jsyaml from 'js-yaml';
 // editor.js — minimal SVG + DOM graph editor for Pocket Stories
 let nodesContainer;
 let svgCanvas;
@@ -22,6 +23,11 @@ let highlightedWarningEdges = new Set();
 let highlightedInfoNodes = new Set();
 let highlightedInfoEdges = new Set();
 let editorEventsBound = false;
+let _boundOnDocMouseMove = null;
+let _boundOnDocMouseUp = null;
+let _boundOnDocKeyDown = null;
+let _boundOnDocKeyUp = null;
+let _boundOnDocConnectionMouseUp = null;
 let showSecondaryEdges = true;
 let inspectorEls = null;
 let editorUiState = { collapsedById: {}, focusCriticalPath: false, canvasViewMode: 'author' };
@@ -774,12 +780,9 @@ function saveState(options = {}) {
     undoStack.push(state);
     if (undoStack.length > MAX_HISTORY) {
         undoStack.shift();
+        historyIndex = MAX_HISTORY - 1;
     } else {
         historyIndex += 1;
-    }
-
-    if (undoStack.length === MAX_HISTORY && historyIndex >= MAX_HISTORY) {
-        historyIndex = MAX_HISTORY - 1;
     }
 }
 
@@ -1138,32 +1141,70 @@ function bindEditorEvents() {
         if (e.button === 1) e.preventDefault();
     });
 
-    document.addEventListener('mousemove', e => {
+    _boundOnDocMouseMove = e => {
         if (!isPanning) return;
         pan.x = e.clientX - panStart.x;
         pan.y = e.clientY - panStart.y;
         updateTransform();
-    });
+    };
 
-    document.addEventListener('mouseup', () => {
+    _boundOnDocMouseUp = () => {
         if (isPanning) {
             isPanning = false;
             wrapper.style.cursor = 'default';
         }
-    });
+    };
 
-    document.addEventListener('keydown', e => {
+    _boundOnDocKeyDown = e => {
         if (e.code !== 'Space') return;
         if (e.target.closest('input, textarea, select, [contenteditable="true"]')) return;
         isSpacePanning = true;
-    });
+    };
 
-    document.addEventListener('keyup', e => {
+    _boundOnDocKeyUp = e => {
         if (e.code !== 'Space') return;
         isSpacePanning = false;
-    });
+    };
+
+    _boundOnDocConnectionMouseUp = e => {
+        if (connectingFrom && e.target.closest('.node') && e.target.closest('.node') !== connectingFrom) {
+            const fromId = connectingFrom.dataset.id;
+            const toNode = e.target.closest('.node');
+            const toId = toNode.dataset.id;
+            if (fromId !== toId) {
+                const text = prompt('Choice text', 'Continue');
+                if (text) {
+                    if (!window.storyData.passages[fromId].choices) window.storyData.passages[fromId].choices = [];
+                    window.storyData.passages[fromId].choices.push({ text, target: toId });
+                    drawConnections();
+                    saveState();
+                }
+            }
+        }
+        connectingFrom = null;
+    };
+
+    document.addEventListener('mousemove', _boundOnDocMouseMove);
+    document.addEventListener('mouseup', _boundOnDocMouseUp);
+    document.addEventListener('keydown', _boundOnDocKeyDown);
+    document.addEventListener('keyup', _boundOnDocKeyUp);
+    document.addEventListener('mouseup', _boundOnDocConnectionMouseUp);
 
     editorEventsBound = true;
+}
+
+function destroyEditor() {
+    if (_boundOnDocMouseMove) document.removeEventListener('mousemove', _boundOnDocMouseMove);
+    if (_boundOnDocMouseUp) document.removeEventListener('mouseup', _boundOnDocMouseUp);
+    if (_boundOnDocKeyDown) document.removeEventListener('keydown', _boundOnDocKeyDown);
+    if (_boundOnDocKeyUp) document.removeEventListener('keyup', _boundOnDocKeyUp);
+    if (_boundOnDocConnectionMouseUp) document.removeEventListener('mouseup', _boundOnDocConnectionMouseUp);
+    _boundOnDocMouseMove = null;
+    _boundOnDocMouseUp = null;
+    _boundOnDocKeyDown = null;
+    _boundOnDocKeyUp = null;
+    _boundOnDocConnectionMouseUp = null;
+    editorEventsBound = false;
 }
 
 function updateTransform() {
@@ -1329,24 +1370,6 @@ function createNode(id, text, index) {
     nodesContainer.appendChild(nodeDiv);
     refreshNodeCard(id);
 }
-
-document.addEventListener('mouseup', e => {
-    if (connectingFrom && e.target.closest('.node') && e.target.closest('.node') !== connectingFrom) {
-        const fromId = connectingFrom.dataset.id;
-        const toNode = e.target.closest('.node');
-        const toId = toNode.dataset.id;
-        if (fromId !== toId) {
-            const text = prompt('Choice text', 'Continue');
-            if (text) {
-                if (!window.storyData.passages[fromId].choices) window.storyData.passages[fromId].choices = [];
-                window.storyData.passages[fromId].choices.push({ text, target: toId });
-                drawConnections();
-                saveState();
-            }
-        }
-    }
-    connectingFrom = null;
-});
 
 function buildEdgePath(edge, fromNode, toNode, layerById, bundleLayout) {
     const fromLeft = parseFloat(fromNode.style.left);
@@ -2964,4 +2987,5 @@ if (btnHelp) {
 }
 
 window.initEditor = initEditor;
-export { initEditor };
+window.destroyEditor = destroyEditor;
+export { initEditor, destroyEditor };
