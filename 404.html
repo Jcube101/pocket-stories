@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Pocket Stories</title>
+  <script>
+    // GitHub Pages SPA redirect.
+    // Converts the 404 path to a query-string parameter that index.html reads
+    // back and restores via history.replaceState before React boots.
+    var l = window.location;
+    l.replace(
+      l.protocol + '//' + l.host + l.pathname.split('/').slice(0, 1).join('/') +
+      '/?p=' + encodeURIComponent(l.pathname.slice(1) + l.search) +
+      (l.hash ? '&h=' + encodeURIComponent(l.hash.slice(1)) : '')
+    );
+  </script>
+</head>
+<body></body>
+</html>
