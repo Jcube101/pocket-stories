@@ -60,6 +60,8 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<{ message: string; type: string }>({ message: 'Loading story...', type: 'info' });
+  const [storyWarnings, setStoryWarnings] = useState<string[]>([]);
+  const [showWarnings, setShowWarnings] = useState(false);
 
   useEffect(() => {
     localStorage.setItem(IMPORTED_STORIES_STORAGE_KEY, JSON.stringify(importedStories));
@@ -80,10 +82,12 @@ export default function App() {
     setError(null);
     try {
       const imported = importedStories.find((entry) => entry.id === id);
-      const loaded = imported ? await loadStoryFromRaw(imported.raw) : await loadStoryById(id);
+      const { data: loaded, warnings } = imported ? await loadStoryFromRaw(imported.raw) : await loadStoryById(id);
       setStory(loaded);
       setActiveStoryId(id);
-      setStatus({ message: `Loaded: ${id}`, type: 'success' });
+      setStoryWarnings(warnings);
+      setShowWarnings(warnings.length > 0);
+      setStatus({ message: `Loaded: ${id}`, type: warnings.length > 0 ? 'warning' : 'success' });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load story');
       setStatus({ message: 'Failed to load story', type: 'error' });
@@ -175,13 +179,25 @@ export default function App() {
         <StoryList
           stories={stories}
           activeStoryId={activeStoryId}
+          activeStoryTitle={story?.title}
           pendingStoryId={pendingStoryId}
           onSelect={setPendingStoryId}
           onLoadSelected={onLoadSelectedStory}
         />
         {topStatus}
+        {showWarnings && storyWarnings.length > 0 && (
+          <div className="story-status warning" role="alert">
+            <strong>Story warnings:</strong>
+            <ul style={{ margin: '0.25rem 0 0 1rem', padding: 0 }}>
+              {storyWarnings.map((w, i) => <li key={i}>{w}</li>)}
+            </ul>
+            <button onClick={() => setShowWarnings(false)} style={{ marginTop: '0.25rem', fontSize: '0.75rem' }}>
+              Dismiss
+            </button>
+          </div>
+        )}
         {mode === 'editor' ? (
-          <StoryEditor story={story} activeStoryId={activeStoryId} setStoryStatus={setStoryStatus} onLoadStoryByPath={onLoadStoryByPath} />
+          <StoryEditor story={story} activeStoryId={activeStoryId} setStoryStatus={setStoryStatus} onLoadStoryByPath={onLoadStoryByPath} onStoryChange={setStory} />
         ) : (
           <PlayerView storyData={story} loading={loading} error={error} />
         )}

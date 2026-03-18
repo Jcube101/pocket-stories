@@ -6,9 +6,10 @@ type Props = {
   activeStoryId: string;
   setStoryStatus: (msg: string, type?: 'info' | 'success' | 'warning' | 'error') => void;
   onLoadStoryByPath: (path: string, label?: string) => Promise<void>;
+  onStoryChange: (updated: StoryData) => void;
 };
 
-export function StoryEditor({ story, activeStoryId, setStoryStatus, onLoadStoryByPath }: Props) {
+export function StoryEditor({ story, activeStoryId, setStoryStatus, onLoadStoryByPath, onStoryChange }: Props) {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const destroyRef = useRef<(() => void) | undefined>(undefined);
 
@@ -24,6 +25,17 @@ export function StoryEditor({ story, activeStoryId, setStoryStatus, onLoadStoryB
       delete (window as any).setSidebarCollapsed;
       delete (window as any).toggleSidebarCollapsed;
     };
+  }, []);
+
+  // Keep window.onStoryChange in sync with the latest prop reference
+  const onStoryChangeRef = useRef(onStoryChange);
+  useEffect(() => { onStoryChangeRef.current = onStoryChange; });
+
+  useEffect(() => {
+    (window as any).onStoryChange = (updated: StoryData) => {
+      onStoryChangeRef.current(structuredClone(updated));
+    };
+    return () => { delete (window as any).onStoryChange; };
   }, []);
 
   useEffect(() => {
