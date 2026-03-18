@@ -40,6 +40,23 @@ const makeUniqueStoryId = (desiredId: string, takenIds: Set<string>) => {
 };
 
 export default function App() {
+  const [theme, setTheme] = useState<'auto' | 'dark' | 'light'>(() => {
+    const stored = localStorage.getItem('pocket_stories_theme_v1');
+    if (stored === 'dark' || stored === 'light' || stored === 'auto') return stored;
+    return 'auto';
+  });
+
+  useEffect(() => {
+    const root = document.documentElement;
+    if (theme === 'auto') root.removeAttribute('data-theme');
+    else root.setAttribute('data-theme', theme);
+    localStorage.setItem('pocket_stories_theme_v1', theme);
+  }, [theme]);
+
+  const cycleTheme = useCallback(() => {
+    setTheme(t => t === 'auto' ? 'dark' : t === 'dark' ? 'light' : 'auto');
+  }, []);
+
   const [stories, setStories] = useState<StoryListItem[]>(() => getAvailableStories());
   const [importedStories, setImportedStories] = useState<ImportedStoryEntry[]>(() => {
     try {
@@ -172,6 +189,14 @@ export default function App() {
         <nav className="tab-row" aria-label="Mode selector">
           <button className={`choice-button ${mode === 'editor' ? 'active' : ''}`} onClick={() => setMode('editor')}>Editor</button>
           <button className={`choice-button ${mode === 'player' ? 'active' : ''}`} onClick={() => setMode('player')}>Player</button>
+          <button
+            className="choice-button theme-toggle"
+            onClick={cycleTheme}
+            title={`Theme: ${theme}. Click to cycle auto → dark → light`}
+            aria-label={`Current theme: ${theme}. Click to change.`}
+          >
+            {theme === 'dark' ? '🌙 Dark' : theme === 'light' ? '☀️ Light' : '⚙️ Auto'}
+          </button>
         </nav>
       </header>
 

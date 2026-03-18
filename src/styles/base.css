@@ -1,0 +1,57 @@
+/* base.css — resets, body, basic HTML element styles */
+
+body {
+    margin: 0;
+    font-family: 'Georgia', serif;
+    background: #f8f8f8;
+    color: #333;
+}
+
+@media (prefers-color-scheme: dark) {
+    body {
+        background: #121212;
+        color: #eee;
+    }
+}
+
+header {
+    text-align: center;
+    padding: 1rem;
+    background: #eee;
+    border-bottom: 1px solid #ddd;
+}
+
+@media (prefers-color-scheme: dark) {
+    header {
+        background: #1e1e1e;
+        border-bottom: 1px solid #444;
+    }
+}
+
+h1 {
+    margin: 0;
+    font-size: 2rem;
+}
+
+#mode-buttons button {
+    padding: 0.5rem 1rem;
+    margin: 0 0.5rem;
+    font-size: 1rem;
+    border: none;
+    background: #ddd;
+    cursor: pointer;
+}
+
+#mode-buttons button.active {
+    background: #007bff;
+    color: white;
+}
+
+.mode {
+    display: flex;
+    height: calc(100vh - 80px);
+}
+
+.hidden {
+    display: none !important;
+}
