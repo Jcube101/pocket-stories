@@ -784,6 +784,11 @@ function saveState(options = {}) {
     } else {
         historyIndex += 1;
     }
+
+    // Notify React of the mutation (skip on init to avoid re-render on every initEditor() call)
+    if (!options.resetHistory && typeof window.onStoryChange === 'function') {
+        window.onStoryChange(window.storyData);
+    }
 }
 
 function initEditor() {
@@ -2743,6 +2748,10 @@ function applyStateIncremental(state) {
 
     drawConnections();
     expandCanvasIfNeeded();
+
+    if (typeof window.onStoryChange === 'function') {
+        window.onStoryChange(window.storyData);
+    }
 }
 
 // Import handler — rebuild with new node creation

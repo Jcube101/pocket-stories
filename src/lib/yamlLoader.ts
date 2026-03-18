@@ -4,6 +4,7 @@ import { validateAndNormalizeStory, type StoryData } from './storyValidator';
 const storyModules = import.meta.glob('../stories/*.yaml', { as: 'raw' });
 
 export type StoryListItem = { id: string; label: string; loader: () => Promise<string> };
+export type StoryLoadResult = { data: StoryData; warnings: string[] };
 
 export function getAvailableStories(): StoryListItem[] {
   return Object.entries(storyModules).map(([path, loader]) => {
@@ -12,16 +13,16 @@ export function getAvailableStories(): StoryListItem[] {
   });
 }
 
-export async function loadStoryFromRaw(raw: string): Promise<StoryData> {
+export async function loadStoryFromRaw(raw: string): Promise<StoryLoadResult> {
   const parsed = parse(raw);
   const result = validateAndNormalizeStory(parsed);
   if (!result.ok || !result.data) {
     throw new Error(result.errors.join(' | ') || 'Story validation failed');
   }
-  return result.data;
+  return { data: result.data, warnings: result.warnings };
 }
 
-export async function loadStoryById(id: string): Promise<StoryData> {
+export async function loadStoryById(id: string): Promise<StoryLoadResult> {
   const found = getAvailableStories().find((story) => story.id === id);
   if (!found) throw new Error(`Story not found: ${id}`);
   const raw = await found.loader();

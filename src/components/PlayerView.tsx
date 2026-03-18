@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { parseStoryEffect, type StoryData } from '../lib/storyValidator';
+import { evalCondition } from '../lib/conditionEvaluator';
 
 type PlayerViewProps = {
   storyData: StoryData | null;
@@ -42,6 +43,7 @@ export function PlayerView({ storyData, loading, error }: PlayerViewProps) {
   const [visibleChoiceCount, setVisibleChoiceCount] = useState(0);
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [outgoingSnapshot, setOutgoingSnapshot] = useState<OutgoingSnapshot | null>(null);
+  const [effectErrors, setEffectErrors] = useState<string[]>([]);
   const transitionTimeoutRef = useRef<number | null>(null);
 
   const prefersReducedMotion = useMemo(
@@ -58,6 +60,7 @@ export function PlayerView({ storyData, loading, error }: PlayerViewProps) {
     setHistory([]);
     setIsTransitioning(false);
     setOutgoingSnapshot(null);
+    setEffectErrors([]);
     if (transitionTimeoutRef.current) {
       window.clearTimeout(transitionTimeoutRef.current);
       transitionTimeoutRef.current = null;
@@ -75,17 +78,10 @@ export function PlayerView({ storyData, loading, error }: PlayerViewProps) {
 
   const passage = storyData?.passages[displayPassage] ?? null;
 
-  const evalCondition = (condition: string) => {
-    try {
-      // eslint-disable-next-line no-new-func
-      const fn = new Function('inventory', 'relationships', 'flags', `return (${condition});`);
-      return Boolean(fn(variablesState.inventory, variablesState.relationships, variablesState.flags));
-    } catch {
-      return false;
-    }
-  };
+  const evaluateCondition = (condition: string) =>
+    evalCondition(condition, variablesState);
 
-  const visibleChoices = passage ? (passage.choices ?? []).filter((choice) => !choice.condition || evalCondition(choice.condition)) : [];
+  const visibleChoices = passage ? (passage.choices ?? []).filter((choice) => !choice.condition || evaluateCondition(choice.condition)) : [];
 
   useEffect(() => {
     if (!passage) return;
@@ -153,6 +149,7 @@ export function PlayerView({ storyData, loading, error }: PlayerViewProps) {
   const applyEffect = (effect: string) => {
     const parsed = parseStoryEffect(effect);
     if (!parsed.ok) {
+      setEffectErrors((prev) => [...prev, `Effect "${effect}": ${parsed.error}`]);
       return;
     }
     const nextState = structuredClone(variablesState);
@@ -203,6 +200,22 @@ export function PlayerView({ storyData, loading, error }: PlayerViewProps) {
 
   return (
     <section className="player-layout">
+      {storyData.title && (
+        <h2 className="player-heading text-2xl font-semibold tracking-tight text-player-text mb-playerSm">
+          {storyData.title}
+        </h2>
+      )}
+      {effectErrors.length > 0 && (
+        <div className="story-status warning" role="alert">
+          <strong>Effect errors (choices may not apply correctly):</strong>
+          <ul style={{ margin: '0.25rem 0 0 1rem', padding: 0 }}>
+            {effectErrors.map((e, i) => <li key={i}>{e}</li>)}
+          </ul>
+          <button onClick={() => setEffectErrors([])} style={{ marginTop: '0.25rem', fontSize: '0.75rem' }}>
+            Dismiss
+          </button>
+        </div>
+      )}
       <div id="passage-container" className="card border-player-border bg-player-surface-elevated p-playerLg text-player-text">
         <div className="passage-stage" data-transitioning={isTransitioning}>
           {outgoingSnapshot && (

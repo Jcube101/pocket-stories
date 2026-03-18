@@ -1,3 +1,5 @@
+import { validateConditionSyntax } from './conditionEvaluator';
+
 export type StoryValidationResult = {
   ok: boolean;
   data: StoryData | null;
@@ -118,10 +120,17 @@ export function validateAndNormalizeStory(input: unknown): StoryValidationResult
     if (Array.isArray(passage.choices)) {
       passage.choices.forEach((choice) => {
         if (isPlainObject(choice) && typeof choice.text === 'string' && typeof choice.target === 'string') {
+          const condition = typeof choice.condition === 'string' ? choice.condition : undefined;
+          if (condition) {
+            const syntaxError = validateConditionSyntax(condition);
+            if (syntaxError) {
+              warnings.push(`Passage "${id}" choice "${choice.text}": condition syntax error — ${syntaxError}`);
+            }
+          }
           choices.push({
             text: choice.text,
             target: choice.target,
-            condition: typeof choice.condition === 'string' ? choice.condition : undefined,
+            condition,
             effect: typeof choice.effect === 'string' ? choice.effect : undefined
           });
         }
