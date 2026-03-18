@@ -2956,17 +2956,10 @@ if (addVarBtn && varTypeSelect && varNameInput) {
     });
 }
 
-if (toggleBtn) {
-    toggleBtn.onclick = () => {
-        if (typeof window.toggleSidebarCollapsed === 'function') {
-            window.toggleSidebarCollapsed();
-            return;
-        }
-        sidebar.classList.toggle('hidden');
-        graphContainer.classList.toggle('expanded');
-        toggleBtn.textContent = sidebar.classList.contains('hidden') ? '▶' : '◀';
-    };
-}
+// toggleBtn.onclick is intentionally NOT set here.
+// StoryEditor.tsx manages #toggle-sidebar via a React onClick handler that calls
+// setIsSidebarCollapsed() directly. Setting onclick here would double-fire the
+// toggle on first mount (React onClick + legacy onclick = two updater calls = no change).
 
 if (btnHelp) {
     btnHelp.onclick = () => showModal({ richHTML: `
