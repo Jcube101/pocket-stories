@@ -6,8 +6,7 @@ const e=`variables:
   relationships:
     Mira: 0
     Ferryman: 0
-  flags:
-    crossed_river: false
+  flags: {}
 
 passages:
   start:

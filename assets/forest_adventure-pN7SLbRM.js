@@ -2,9 +2,7 @@ const e=`# story.yaml
 variables:
   inventory:
     key: false
-    sword: 0
     potion: 0
-    dragon_scale: false
     map_fragment: false
   relationships:
     Alice: 0
