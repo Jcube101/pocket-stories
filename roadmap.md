@@ -1,131 +1,87 @@
 # Pocket Stories — Development Roadmap
 
-Last updated: 2026-03-10. Based on the initial codebase audit (see `known-issues.md` for the full bug list and `decisions.md` for the architectural choices that shape this plan).
+Last updated: 2026-03-18. Phase 1 and Phase 2 complete. See `known-issues.md` for the full bug list and `decisions.md` for the architectural choices that shape this plan.
 
 ---
 
-## Phase 1 — Stabilize
+## Phase 1 — Stabilize ✅ COMPLETE
 
-Must be complete before any new feature work. These are crashes, silent breakage, and dead code that will undermine anything built on top of them.
+All Phase 1 items were implemented and merged (branch `claude/create-claude-md-ZAKIr`, 2026-03-18).
 
-### P1-1 ★ Fix missing `js-yaml` dependency — *CRASH*
+### P1-1 ★ Fix missing `js-yaml` dependency — *DONE*
 
-The editor calls `jsyaml.dump()` and `jsyaml.load()` but `js-yaml` is not in `package.json` and is never imported. Clicking "Export Story" throws `ReferenceError: jsyaml is not defined`.
+- Added `js-yaml` to `package.json` dependencies
+- Added `import jsyaml from 'js-yaml'` at top of `src/legacy/editor.js`
 
-- Add `js-yaml` to `package.json` dependencies
-- Add `import jsyaml from 'js-yaml'` at top of `src/legacy/editor.js`
-- Files: `package.json`, `src/legacy/editor.js`
+### P1-2 ★ Fix editor event listener leak and broken story-switch — *DONE*
 
-### P1-2 ★ Fix editor event listener leak and broken story-switch — *CRASH / LEAK*
+- Named listener refs in `editor.js`; `destroyEditor()` exported and removes all listeners, resets `editorEventsBound`
+- `StoryEditor.tsx` calls `destroyEditor()` on cleanup; `cancelled` flag prevents double-init in StrictMode
 
-`editor.js` attaches seven `document.addEventListener` calls that are never removed. `editorEventsBound` is set `true` on first init and never reset. Switching stories rebuilds the DOM but silently skips re-attaching events — the canvas goes dead. Every mount adds another listener set.
+### P1-3 ★ Stabilize `StoryEditor.tsx` effect dependency — *DONE*
 
-- In `editor.js`: save named references to listener functions; export `destroyEditor()` that calls `removeEventListener` for each and resets `editorEventsBound = false`
-- In `StoryEditor.tsx`: return `() => destroyEditor()` from the `useEffect`
-- Files: `src/legacy/editor.js` (~line 1102), `src/components/StoryEditor.tsx`
+- `loadStoryRef` pattern: ref holds latest `loadStory`; `onLoadStoryByPath` wrapped in `useCallback([activeStoryId])`
+- Effect dep is now stable — `initEditor()` only fires when `story` or `activeStoryId` changes
 
-### P1-3 ★ Stabilize `StoryEditor.tsx` effect dependency — *RUNAWAY RE-INIT*
+### P1-4 Delete dead `StoryPlayer.tsx` — *DONE*
 
-`onLoadStoryByPath` is an inline arrow function in `App.tsx` — it gets a new reference every render. It's listed as a dep in `StoryEditor.tsx`'s `useEffect`, so `initEditor()` fires on every parent re-render.
+- Deleted `src/components/StoryPlayer.tsx`
 
-- Wrap `onLoadStoryByPath` in `useCallback` in `App.tsx`
-- Add ID guard in `App.tsx`: validate that the resolved story ID exists before calling `loadStory()`
-- Files: `src/App.tsx`, `src/components/StoryEditor.tsx`
+### P1-5 Add `.catch()` to dynamic editor import — *DONE*
 
-### P1-4 Delete dead `StoryPlayer.tsx`
+- `.catch()` added to `import('../legacy/editor.js')` in `StoryEditor.tsx`; shows user-visible error message
 
-Never rendered — `App.tsx` uses `PlayerView` directly. Has a different prop signature (`story` vs `storyData`), indicating an incomplete refactor.
+### P1-6 Fix undo/redo history index corruption — *DONE*
 
-- Delete `src/components/StoryPlayer.tsx`
-- Files: `src/components/StoryPlayer.tsx`
+- After `undoStack.shift()`, sets `historyIndex = MAX_HISTORY - 1`
 
-### P1-5 Add `.catch()` to dynamic editor import
+### P1-7 Fix React StrictMode double-initialization — *DONE*
 
-`StoryEditor.tsx` has no error handler on `import('../legacy/editor.js')`. A load failure produces a blank, silent canvas.
-
-- Add `.catch(err => { /* set error state */ })` to show a user-visible message
-- Files: `src/components/StoryEditor.tsx`
-
-### P1-6 Fix undo/redo history index corruption
-
-When `undoStack` hits `MAX_HISTORY (20)` and the oldest entry is shifted off, `historyIndex` is not decremented. Redo becomes permanently unavailable.
-
-- After `undoStack.shift()`, add `historyIndex = Math.max(0, historyIndex - 1)`
-- Files: `src/legacy/editor.js` (lines 780–782)
-
-### P1-7 Fix React StrictMode double-initialization
-
-Partially resolved by P1-2. After that fix, verify dev-mode behavior. Add a `useRef` mount guard in `StoryEditor.tsx` if double-render flicker persists.
-
-- Files: `src/components/StoryEditor.tsx`
+- Resolved by P1-2 + `cancelled` flag in `StoryEditor.tsx` effect
 
 ---
 
-## Phase 2 — Core Features
+## Phase 2 — Core Features ✅ COMPLETE
 
-These are the gaps that make the current experience incomplete. Requires Phase 1 to be stable first.
+All Phase 2 items were implemented and merged (branch `claude/create-claude-md-ZAKIr`, 2026-03-18).
 
-### P2-1 ★ Surface validation warnings to story authors
+### P2-1 ★ Surface validation warnings to story authors — *DONE*
 
-`yamlLoader.ts` discards `result.warnings` — authors get no feedback on unused variables, undeclared targets, etc.
+- `yamlLoader.ts` returns `{ data, warnings }` as `StoryLoadResult`
+- `App.tsx` shows dismissible warnings banner on story load
 
-- Extend `loadStoryFromRaw()` to return warnings alongside data
-- Pipe warnings through `App.tsx` state
-- Display as a dismissible notice when a story is loaded (player and editor)
-- Files: `src/lib/yamlLoader.ts`, `src/App.tsx`, `src/components/PlayerView.tsx`
+### P2-2 ★ Replace `new Function()` condition evaluator — *DONE*
 
-### P2-2 ★ Replace `new Function()` condition evaluator
+- `src/lib/conditionEvaluator.ts` created: tokenizer + recursive descent parser
+- Supports `==`, `!=`, `>=`, `<=`, `>`, `<`, `&&`, `||`, `!`, numeric/boolean literals, dotted variable paths
+- `PlayerView.tsx` uses `evalCondition()` from `conditionEvaluator.ts`
 
-`evalCondition` in `PlayerView.tsx` executes condition strings as raw JavaScript. A malicious story file could run arbitrary code in the user's browser.
+### P2-3 ★ Sync editor mutations back to React state — *DONE*
 
-- Implement a safe expression evaluator in `src/lib/conditionEvaluator.ts` supporting: `==`, `!=`, `>=`, `<=`, `>`, `<`, `&&`, `||`, `!`, numeric/boolean literals, and dotted variable paths
-- Add condition syntax validation to `storyValidator.ts`
-- All four built-in stories use only this operator set — no breaking change
-- Files: `src/components/PlayerView.tsx`, `src/lib/storyValidator.ts`, `src/lib/conditionEvaluator.ts` (new)
+- `editor.js` calls `window.onStoryChange(storyData)` after every `saveState()` commit and after undo/redo
+- `StoryEditor.tsx` registers the callback and calls `setStory(structuredClone(updated))`
 
-### P2-3 ★ Sync editor mutations back to React state
+### P2-4 Surface `applyEffect` failures — *DONE*
 
-The editor mutates `window.storyData.passages` directly. React state (`story` in `App.tsx`) is never updated, so switching to player mode after editing renders stale data.
+- `PlayerView.tsx` collects `applyEffect` failures into `effectErrors` state; shown as dismissible overlay
 
-- Editor calls `window.onStoryChange(storyData)` after every mutation
-- `StoryEditor.tsx` registers this callback and triggers a React state update via prop
-- Files: `src/legacy/editor.js`, `src/components/StoryEditor.tsx`, `src/App.tsx`
+### P2-5 Add condition syntax validation in the validator — *DONE*
 
-### P2-4 Surface `applyEffect` failures
+- `storyValidator.ts` calls `validateConditionSyntax()` on each choice condition; bad syntax produces a warning
 
-`applyEffect` in `PlayerView.tsx` silently discards parse failures — broken effect expressions just don't apply.
+### P2-6 Display story title and metadata — *DONE*
 
-- Collect failures into a diagnostic state array; display as a non-blocking overlay (requires P2-1 banner infrastructure)
-- Files: `src/components/PlayerView.tsx`
+- `PlayerView.tsx` shows story title header
+- `StoryList.tsx` shows `activeStoryTitle` for the loaded story
 
-### P2-5 Add condition syntax validation in the validator
+### P2-7 Fix StoryList active/pending selection state — *DONE*
 
-`storyValidator.ts` accepts any string as a condition without checking it. Pair with P2-2's evaluator grammar to reject unsupported syntax at load time.
+- Load button `active` class and `disabled` state conditional on `pendingStoryId !== activeStoryId`
 
-- Files: `src/lib/storyValidator.ts`, `src/lib/conditionEvaluator.ts`
+### P2-8 Add GitHub Pages 404 fallback — *DONE*
 
-### P2-6 Display story title and metadata
-
-`StoryData` has `title` and `metadata` fields — nothing renders them. The story list shows raw file-derived IDs; the player shows no title.
-
-- `StoryList.tsx`: use `title` as primary label (ID as subtitle)
-- `PlayerView.tsx`: show title in player header
-- Files: `src/components/StoryList.tsx`, `src/components/PlayerView.tsx`
-
-### P2-7 Fix StoryList active/pending selection state
-
-The "Load selected story" button has a hardcoded `active` class — it always appears selected regardless of state. No visual distinction between "selected" and "loaded".
-
-- Apply `active` only when story ID === loaded story ID
-- Add a `pending` visual treatment for selected-but-not-loaded
-- Files: `src/components/StoryList.tsx`
-
-### P2-8 Add GitHub Pages 404 fallback
-
-No `404.html` redirect is configured. Deep links or browser refreshes return a GitHub Pages 404 before React can handle them.
-
-- Add `public/404.html` with the standard GitHub Pages SPA redirect script
-- Files: `public/404.html`, `index.html`
+- `public/404.html` created with SPA redirect script
+- `index.html` has path restoration script
 
 ---
 
