@@ -4,6 +4,7 @@ import { StoryList } from './components/StoryList';
 import { PlayerView } from './components/PlayerView';
 import { getAvailableStories, loadStoryById, loadStoryFromRaw, type StoryListItem } from './lib/yamlLoader';
 import { parseStoryEffect, validateAndNormalizeStory, type StoryData } from './lib/storyValidator';
+import { validateConditionSyntax } from './lib/conditionEvaluator';
 
 const IMPORTED_STORIES_STORAGE_KEY = 'pocket_stories_imported_entries_v1';
 
@@ -55,6 +56,22 @@ export default function App() {
 
   const cycleTheme = useCallback(() => {
     setTheme(t => t === 'auto' ? 'dark' : t === 'dark' ? 'light' : 'auto');
+  }, []);
+
+  // Wire up parsers for editor.js diagnostics
+  useEffect(() => {
+    (window as any).validateAndNormalizeStory = validateAndNormalizeStory;
+    (window as any).parseStoryEffect = parseStoryEffect;
+    (window as any).storyParsers = {
+      parseCondition: (cond: string) => {
+        const err = validateConditionSyntax(cond);
+        if (err) throw new Error(err);
+      },
+      parseEffect: (effect: string) => {
+        const result = parseStoryEffect(effect);
+        if (!result.ok) throw new Error('Invalid effect expression');
+      },
+    };
   }, []);
 
   const [stories, setStories] = useState<StoryListItem[]>(() => getAvailableStories());
@@ -114,8 +131,6 @@ export default function App() {
   };
 
   useEffect(() => {
-    (window as any).validateAndNormalizeStory = validateAndNormalizeStory;
-    (window as any).parseStoryEffect = parseStoryEffect;
     loadStory(activeStoryId);
   }, []);
 
@@ -163,8 +178,6 @@ export default function App() {
 
   const setStoryStatus = useCallback((message: string, type = 'info') => setStatus({ message, type }), []);
 
-  // Keep a ref to the latest loadStory so onLoadStoryByPath doesn't change identity
-  // when importedStories changes (which would re-trigger the editor effect unnecessarily).
   const loadStoryRef = useRef(loadStory);
   useEffect(() => { loadStoryRef.current = loadStory; });
 
@@ -185,30 +198,34 @@ export default function App() {
   return (
     <div className="app-shell">
       <header className="top-header">
-        <h1>Pocket Stories</h1>
-        <nav className="tab-row" aria-label="Mode selector">
-          <button className={`choice-button ${mode === 'editor' ? 'active' : ''}`} onClick={() => setMode('editor')}>Editor</button>
-          <button className={`choice-button ${mode === 'player' ? 'active' : ''}`} onClick={() => setMode('player')}>Player</button>
+        <div className="header-left">
+          <h1>Pocket Stories</h1>
+          <nav className="tab-row" aria-label="Mode selector">
+            <button className={`choice-button${mode === 'editor' ? ' active' : ''}`} onClick={() => setMode('editor')}>Editor</button>
+            <button className={`choice-button${mode === 'player' ? ' active' : ''}`} onClick={() => setMode('player')}>Player</button>
+          </nav>
+        </div>
+        <div className="header-right">
+          <StoryList
+            stories={stories}
+            activeStoryId={activeStoryId}
+            activeStoryTitle={story?.title}
+            pendingStoryId={pendingStoryId}
+            onSelect={setPendingStoryId}
+            onLoadSelected={onLoadSelectedStory}
+          />
           <button
             className="choice-button theme-toggle"
             onClick={cycleTheme}
             title={`Theme: ${theme}. Click to cycle auto → dark → light`}
             aria-label={`Current theme: ${theme}. Click to change.`}
           >
-            {theme === 'dark' ? '🌙 Dark' : theme === 'light' ? '☀️ Light' : '⚙️ Auto'}
+            {theme === 'dark' ? '🌙' : theme === 'light' ? '☀️' : '⚙️'} {theme.charAt(0).toUpperCase() + theme.slice(1)}
           </button>
-        </nav>
+        </div>
       </header>
 
       <main className="main-content">
-        <StoryList
-          stories={stories}
-          activeStoryId={activeStoryId}
-          activeStoryTitle={story?.title}
-          pendingStoryId={pendingStoryId}
-          onSelect={setPendingStoryId}
-          onLoadSelected={onLoadSelectedStory}
-        />
         {topStatus}
         {showWarnings && storyWarnings.length > 0 && (
           <div className="story-status warning" role="alert">

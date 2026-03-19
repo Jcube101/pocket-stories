@@ -411,26 +411,22 @@
     box-sizing: border-box;
 }
 
-/* Center text vertically in Remove button */
+/* Variable remove icon button */
 .variable-remove {
     background: #ef4444;
     color: white;
     border: none;
-    width: 28px;
-    height: 28px;
-    border-radius: 6px;
-    font-size: 12px;
-    line-height: 1;               /* reset default line-height */
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    font-size: 1.2rem;
+    font-weight: 700;
+    line-height: 1;
     cursor: pointer;
     padding: 0;
     display: flex;
-    align-items: center;          /* vertical center */
-    justify-content: center;      /* horizontal center */
-}
-
-/* Optional: smaller font if you still find it too big */
-.variable-remove {
-    font-size: 11px;              /* ← try 11px or 10px */
+    align-items: center;
+    justify-content: center;
 }
 
 .variable-remove:hover {
