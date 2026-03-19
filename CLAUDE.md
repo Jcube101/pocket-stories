@@ -62,7 +62,10 @@ pocket-stories/
 │   │   └── yamlLoader.ts        # Loads stories via import.meta.glob + parses raw YAML
 │   ├── stories/                 # YAML story sources (bundled with the app)
 │   └── styles/
-│       └── global.css           # All styles — monolithic, see known-issues.md S1
+│       ├── global.css           # Tailwind directives + @imports + theme overrides
+│       ├── base.css             # Resets, body, base element styles
+│       ├── editor-graph.css     # Legacy editor: canvas, nodes, SVG
+│       └── player.css           # Player UI, CSS custom properties, animations
 ├── public/
 │   ├── 404.html                 # GitHub Pages SPA redirect (prevents 404 on deep links)
 │   └── stories/                 # Static copies of YAML files (served as assets)
@@ -89,7 +92,7 @@ pocket-stories/
 
 ## Known Issues
 
-All Phase 1, 2, and 3 items are complete. No open tracked issues remain.
+All Phase 1, 2, and 3 items are complete. One minor open issue remains: Y3 (redundant condition in `space_outpost.yaml` — harmless). CSS @import ordering bug (S2) introduced by P3-2 was hotfixed 2026-03-19.
 
 Full history: `known-issues.md`
 
@@ -117,7 +120,7 @@ showWarnings       — controls visibility of the dismissible warnings banner
 `App.tsx` and `StoryEditor.tsx` expose functions on `window` for the legacy editor to call back into React:
 
 ```ts
-window.storyData                          // current story (mutable by editor — see B10)
+window.storyData                          // current story (mutable by editor; synced to React via onStoryChange)
 window.activeStoryId
 window.validateAndNormalizeStory(raw)     // validate + normalize a YAML story
 window.parseStoryEffect(effect)           // parse a variable effect string
@@ -203,7 +206,7 @@ spacing:  playerXs, playerSm, playerMd, playerLg, playerXl
 fonts:    playerSans, playerSerif
 ```
 
-### CSS custom properties (`src/styles/global.css`)
+### CSS custom properties (`src/styles/player.css`)
 `--player-bg`, `--player-text`, `--player-accent`, etc. Dark mode via `@media (prefers-color-scheme: dark)`.
 
 **Tailwind-first rule:** New React components should use Tailwind utilities, not add to CSS files. See `decisions.md` Decision 4. Editor graph styles (`#nodes-container`, `.node`, `#svg-canvas`) must stay in `editor-graph.css`.
@@ -223,8 +226,9 @@ fonts:    playerSans, playerSerif
 ## CI/CD
 
 - Trigger: push to `master`
-- Steps: Node 20 → `npm install` → `npm run build` → deploy `./dist` to GitHub Pages
+- Steps: Node 22 → `npm install` → `npm run build` → deploy `./dist` to GitHub Pages
 - Token: `GITHUB_TOKEN`
+- Env: `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true` (silences GH Actions Node.js 20 deprecation warnings)
 
 ---
 
