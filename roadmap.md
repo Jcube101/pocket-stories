@@ -1,6 +1,6 @@
 # Pocket Stories — Development Roadmap
 
-Last updated: 2026-03-18. All three phases complete. See `known-issues.md` for the full bug list and `decisions.md` for the architectural choices that shape this plan.
+Last updated: 2026-03-19. All three phases complete. See `known-issues.md` for the full bug list and `decisions.md` for the architectural choices that shape this plan.
 
 ---
 
@@ -101,6 +101,8 @@ All Phase 3 items implemented (branch `claude/create-claude-md-ZAKIr`, 2026-03-1
 - `src/styles/editor-graph.css` — legacy editor: sidebar, canvas, nodes, connections, SVG
 - `src/styles/player.css` — CSS custom properties, app-shell, player layout, animations
 - `global.css` now just `@tailwind` directives + `@import` statements + theme overrides
+
+**Hotfix (2026-03-19):** P3-2 placed `@import` after `@tailwind` directives, which caused browsers to silently drop all three imported stylesheets. Fixed by moving `@import` statements above `@tailwind` directives (see known-issues.md S2).
 
 ### P3-3 ★ Add manual dark mode toggle — *DONE*
 

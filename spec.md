@@ -75,7 +75,7 @@ passages:
 
 Conditions are evaluated against the current variable state. The supported operators are: `==`, `!=`, `>=`, `<=`, `>`, `<`, `&&`, `||`, `!`. Conditions can reference dotted paths: `inventory.key`, `relationships.Guard`, `flags.door_open`.
 
-Note: As of the initial audit, conditions are evaluated via `new Function()` (a known security gap — see `known-issues.md` B9 and `decisions.md` Decision 2). The intention is to replace this with a sandboxed expression evaluator.
+Conditions are evaluated by the safe sandboxed parser in `src/lib/conditionEvaluator.ts` — no `eval` or `new Function` (B9 fixed, P2-2).
 
 #### Security Constraints
 
@@ -87,7 +87,7 @@ The validator blocks these variable name path segments to prevent prototype poll
 
 - **Errors** prevent the story from loading (e.g., missing `passages`, invalid passage structure)
 - **Warnings** indicate issues that don't block loading (e.g., unused variables)
-- Note: As of the initial audit, warnings are silently discarded by `yamlLoader.ts` — this is a known gap (see `known-issues.md` B7)
+- Warnings are returned as `StoryLoadResult.warnings` and displayed as a dismissible banner in `App.tsx` (B7 fixed, P2-1)
 
 ### Player Behavior
 
@@ -115,7 +115,7 @@ The validator blocks these variable name path segments to prevent prototype poll
 
 ### Mode Switching
 
-The app header has Editor/Player tabs. Switching to Player renders the current loaded story. Note: as of the initial audit, edits made in the editor are not reflected in the player until the story is re-loaded, because the editor mutates `window.storyData` directly while React state is not updated (see `known-issues.md` B10 and `decisions.md` Decision 3).
+The app header has Editor/Player tabs. Switching to Player renders the current loaded story. Editor mutations are synced to React state via `window.onStoryChange` — switching to player mode immediately reflects edits without a reload (B10 fixed, P2-3).
 
 ### Global Window Bridge
 
@@ -153,7 +153,10 @@ src/
     yamlLoader.ts         — Loads stories via import.meta.glob or raw YAML string.
   stories/                — Built-in YAML story files.
   styles/
-    global.css            — All styles (1,553 lines; see known-issues.md).
+    global.css            — Tailwind directives + @imports + theme overrides (split in P3-2)
+    base.css              — Resets and base element styles
+    editor-graph.css      — Legacy editor canvas and node styles
+    player.css            — Player UI, CSS custom properties, animations
 public/
   stories/                — Static copies of built-in stories for direct serving.
 ```
@@ -171,7 +174,7 @@ Tailwind CSS 3 with custom design tokens:
 | Typography | `playerSans`, `playerSerif` |
 | Other | `rounded-player`, `shadow-player` |
 
-Tokens are defined as CSS custom properties in `global.css` and referenced by Tailwind via `tailwind.config.js`. Dark mode is handled via `@media (prefers-color-scheme: dark)`.
+Tokens are defined as CSS custom properties in `player.css` and referenced by Tailwind via `tailwind.config.js`. Dark mode is handled via `@media (prefers-color-scheme: dark)` with manual override via `html[data-theme]` (see P3-3).
 
 ---
 
@@ -180,7 +183,7 @@ Tokens are defined as CSS custom properties in `global.css` and referenced by Ta
 - Static site, deployed to GitHub Pages at `https://Jcube101.github.io/pocket-stories/`
 - CI: GitHub Actions (`deploy-gh-pages.yml`) triggers on push to `master`
 - Build: `tsc && vite build` → output in `./dist`
-- Vite base path: `/pocket-stories/` (hardcoded in `vite.config.ts`)
+- Vite base path: `/pocket-stories/` (configurable via `VITE_BASE_PATH` env var; see `.env.example`)
 
 ---
 

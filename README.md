@@ -15,7 +15,7 @@ npm run build     # production build → ./dist
 npm run deploy    # build + deploy to GitHub Pages
 ```
 
-> There are no tests yet. `npm test` will fail. See `roadmap.md` for plans to add Vitest.
+> Tests run with Vitest. `npm test` runs the suite.
 
 ---
 
@@ -95,7 +95,10 @@ src/
     yamlLoader.ts      — Loads stories via import.meta.glob
   stories/             — Built-in YAML stories (loaded at build time)
   styles/
-    global.css         — All styles (Tailwind + custom CSS)
+    global.css         — Tailwind directives + @imports + theme overrides
+    base.css           — Resets and base element styles
+    editor-graph.css   — Legacy editor canvas and node styles
+    player.css         — Player UI, CSS custom properties, animations
 public/
   stories/             — Static copies of built-in stories
 ```
@@ -110,11 +113,9 @@ Drop a `.yaml` file into `src/stories/`. The app picks it up automatically via `
 
 ## Known issues
 
-The codebase has several live bugs from a prior migration. Read `known-issues.md` before working on the editor or player. The most impactful:
+One minor open issue remains. See `known-issues.md` for the full list:
 
-- **Editor export crashes** — `js-yaml` is not installed (roadmap P1-1)
-- **Editor canvas goes dead after story switch** — event listener cleanup is missing (P1-2)
-- **Editor edits don't appear in player mode** — state sync not implemented (P2-3)
+- **Redundant condition in `space_outpost.yaml`** — logically redundant but harmless (Y3)
 
 ---
 

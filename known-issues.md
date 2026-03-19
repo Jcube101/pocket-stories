@@ -1,6 +1,6 @@
 # Pocket Stories — Known Issues
 
-Bugs and gaps found during the initial codebase audit (2026-03-10). Updated 2026-03-18 after all three phases complete. Each item links to the relevant roadmap item in `roadmap.md`.
+Bugs and gaps found during the initial codebase audit (2026-03-10). Updated 2026-03-19 after CSS @import hotfix. Each item links to the relevant roadmap item in `roadmap.md`.
 
 **Status key:** ✅ Fixed | 🔴 Open
 
@@ -115,6 +115,10 @@ Bugs and gaps found during the initial codebase audit (2026-03-10). Updated 2026
 ### S1 — `global.css` is monolithic and unscoped ✅ Fixed (P3-2)
 ~~1,553-line monolithic CSS file.~~
 **Fix:** Split into `base.css` (resets), `editor-graph.css` (editor/canvas), `player.css` (React player + CSS custom properties). `global.css` now just `@tailwind` + `@import` + theme overrides.
+
+### S2 — `@import` after `@tailwind` in `global.css` drops all custom styles ✅ Fixed (2026-03-19)
+~~P3-2 placed the three `@import` statements after `@tailwind` directives. CSS spec requires `@import` before all other rules; browsers silently ignore `@import` that appears after other rules, so `base.css`, `editor-graph.css`, and `player.css` were all dropped — rendering the app as plain unstyled text.~~
+**Fix:** Moved the three `@import` lines to the top of `global.css`, before the `@tailwind` directives.
 
 ---
 
