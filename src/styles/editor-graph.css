@@ -1,8 +1,6 @@
 /* editor-graph.css — legacy SVG node-graph editor: sidebar, canvas, nodes, connections */
 /* These styles must stay global — they are applied to DOM elements created by editor.js */
 
-}
-
 .mode {
     display: flex;
     height: calc(100vh - 80px);
