@@ -13,31 +13,31 @@ export function StoryList({ stories, activeStoryId, activeStoryTitle, pendingSto
   const hasNewSelection = Boolean(pendingStoryId && pendingStoryId !== activeStoryId);
 
   return (
-    <div className="story-list card">
-      <h2>Stories</h2>
-      <div className="story-grid">
+    <div className="header-story-selector">
+      <select
+        value={pendingStoryId ?? activeStoryId ?? ''}
+        onChange={e => onSelect(e.target.value)}
+        className="story-select"
+        aria-label="Select a story"
+        title="Select a story to load"
+      >
         {stories.map((story) => {
           const isActive = story.id === activeStoryId;
-          const isPending = story.id === pendingStoryId;
-          const displayTitle = isActive && activeStoryTitle ? activeStoryTitle : null;
+          const label = isActive && activeStoryTitle ? activeStoryTitle : story.label;
           return (
-            <button
-              key={story.id}
-              className={`choice-button ${isPending ? 'active' : ''}`}
-              onClick={() => onSelect(story.id)}
-            >
-              {displayTitle ?? story.label}
-              {isActive && <span style={{ fontSize: '0.75em', opacity: 0.6, marginLeft: '0.4em' }}>(loaded)</span>}
-            </button>
+            <option key={story.id} value={story.id}>
+              {label}{isActive ? ' ✓' : ''}
+            </option>
           );
         })}
-      </div>
+      </select>
       <button
-        className={`choice-button ${hasNewSelection ? 'active' : ''}`}
+        className={`choice-button${hasNewSelection ? ' active' : ''}`}
         onClick={onLoadSelected}
         disabled={!hasNewSelection}
+        title="Load selected story"
       >
-        Load selected story
+        Load
       </button>
     </div>
   );

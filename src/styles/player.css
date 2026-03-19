@@ -49,9 +49,9 @@
 
 .variable-row {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 96px auto;
+    grid-template-columns: minmax(0, 1fr) 90px 32px;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
     margin-bottom: 8px;
     padding: 0;
 }
@@ -64,6 +64,8 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     font-weight: 600;
+    font-size: 0.9rem;
+    letter-spacing: 0;
 }
 
 .variable-label:hover::after,
@@ -106,13 +108,18 @@
 }
 
 .variable-remove {
-    width: auto;
-    min-width: 74px;
-    height: 34px;
-    padding: 0 12px;
-    font-size: 0.88rem;
+    width: 32px;
+    min-width: 32px;
+    height: 32px;
+    padding: 0;
+    font-size: 1.2rem;
+    line-height: 1;
     border-radius: 8px;
     margin: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
 }
 
 #add-variable-form .row-inline {
@@ -138,6 +145,90 @@
 
 .passage-item:hover {
     color: #f8fafc;
+}
+
+/* Tools section 2×2 grid */
+.tools-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+}
+
+.tools-grid button {
+    margin: 0 !important;
+    width: 100% !important;
+    min-height: 36px;
+    font-size: 0.82rem;
+    padding: 0.4rem 0.5rem;
+    text-align: center;
+}
+
+/* View mode buttons */
+.controls-subhead {
+    margin: 10px 0 6px 0;
+    font-size: 0.8rem;
+    font-weight: 600;
+    opacity: 0.8;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.view-mode-btns {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+    margin-bottom: 4px;
+}
+
+.view-mode-btn {
+    padding: 0.35rem 0.25rem;
+    font-size: 0.8rem;
+    border-radius: 7px;
+    border: 1px solid var(--button-border);
+    background: var(--button-bg);
+    color: var(--button-text);
+    cursor: pointer;
+    text-align: center;
+    transition: background 0.15s, color 0.15s;
+}
+
+.view-mode-btn[data-active="true"] {
+    background: #1d4ed8;
+    color: #fff;
+    border-color: #1e40af;
+    font-weight: 600;
+}
+
+/* Split view toggle buttons */
+.view-toggles-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+}
+
+.view-toggle-btn {
+    padding: 0.4rem 0.4rem;
+    font-size: 0.78rem;
+    border-radius: 7px;
+    border: 1px solid var(--button-border);
+    background: var(--button-bg);
+    color: var(--button-text);
+    cursor: pointer;
+    text-align: center;
+    transition: background 0.15s, color 0.15s;
+}
+
+.view-toggle-btn[data-active="true"] {
+    background: #059669;
+    color: #fff;
+    border-color: #047857;
+    font-weight: 600;
+}
+
+.canvas-hint {
+    font-size: 11px;
+    opacity: 0.65;
+    line-height: 1.4;
 }
 
 .canvas-controls-grid {
@@ -313,7 +404,7 @@
 
 
 #diagnostics-section {
-    max-height: 34vh;
+    max-height: 55vh;
     display: flex;
     flex-direction: column;
 }
@@ -430,11 +521,35 @@
 
 .top-header {
   display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
+  flex-direction: row;
   align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
   background: var(--surface-card);
   border-bottom: 1px solid var(--border-subtle);
+  flex-wrap: wrap;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-shrink: 0;
+}
+
+.header-left h1 {
+  font-size: 1.1rem;
+  font-weight: 700;
+  white-space: nowrap;
+  margin: 0;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
 }
 
 .main-content {
@@ -465,10 +580,33 @@
 .tab-row {
   display: flex;
   flex-direction: row;
-  justify-content: center;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.4rem;
   flex-wrap: nowrap;
+}
+
+/* Header story selector */
+.header-story-selector {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.story-select {
+  height: 36px;
+  padding: 0 0.5rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--button-border);
+  background: var(--button-bg);
+  color: var(--button-text);
+  font-size: 0.875rem;
+  max-width: 200px;
+  cursor: pointer;
+}
+
+.story-select:focus {
+  outline: 2px solid var(--player-accent);
+  outline-offset: 1px;
 }
 
 .choice-button {

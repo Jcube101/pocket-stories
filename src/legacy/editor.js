@@ -54,11 +54,16 @@ let _boundOnDocMouseUp = null;
 let _boundOnDocKeyDown = null;
 let _boundOnDocKeyUp = null;
 let _boundOnDocConnectionMouseUp = null;
+let _boundOnWrapperWheel = null;
+let _boundOnTouchStart = null;
+let _boundOnTouchMove = null;
+let _boundOnTouchEnd = null;
 let showSecondaryEdges = true;
 let inspectorEls = null;
 let editorUiState = { collapsedById: {}, focusCriticalPath: false, canvasViewMode: 'author' };
 let diagnosticsState = { issues: [], analyzers: {}, byNode: {} };
 let hoveredNodeId = null;
+let _preservedSelectedId = null;
 let downstreamHighlight = { nodes: new Set(), edges: new Set() };
 let highlightFullDownstream = false;
 
@@ -721,6 +726,7 @@ function applyInspectorTypeEdit() {
 function selectNodeByElement(node) {
     if (selectedNode) selectedNode.classList.remove('selected');
     selectedNode = node;
+    _preservedSelectedId = node ? node.dataset.id : null;
     if (selectedNode) selectedNode.classList.add('selected');
     updateNodeInspector(selectedNode ? selectedNode.dataset.id : null);
     refreshDownstreamHighlight();
@@ -970,7 +976,19 @@ function initEditor() {
         };
     }
 
-    updateNodeInspector(null);
+    // Restore previously selected node after re-init
+    if (_preservedSelectedId && window.storyData.passages[_preservedSelectedId]) {
+        const restoredNode = nodesContainer.querySelector(`.node[data-id="${_preservedSelectedId}"]`);
+        if (restoredNode) {
+            selectedNode = restoredNode;
+            restoredNode.classList.add('selected');
+            updateNodeInspector(_preservedSelectedId);
+        } else {
+            updateNodeInspector(null);
+        }
+    } else {
+        updateNodeInspector(null);
+    }
 
     const searchInput = document.getElementById('passage-search');
     if (searchInput) {
@@ -981,30 +999,7 @@ function initEditor() {
     bindEditorEvents();
     bindToolbarEvents();
 
-    // Wheel zoom
-    nodesContainer.onwheel = e => {
-        e.preventDefault();
-        const wrapper = document.getElementById('canvas-wrapper');
-        if (!wrapper) return;
-
-        const wrapperRect = wrapper.getBoundingClientRect();
-        const pointerX = e.clientX - wrapperRect.left;
-        const pointerY = e.clientY - wrapperRect.top;
-        const worldX = (pointerX - pan.x) / scale;
-        const worldY = (pointerY - pan.y) / scale;
-
-        const factor = e.deltaY < 0 ? 1.1 : 0.9;
-        const nextScale = Math.max(0.3, Math.min(scale * factor, 2));
-        scale = nextScale;
-
-        pan.x = pointerX - (worldX * scale);
-        pan.y = pointerY - (worldY * scale);
-
-        updateTransform();
-        updateZoomIndicator();
-    };
-
-    // Zoom and focus controls
+    // Zoom and focus controls (wheel zoom is handled in bindEditorEvents)
     document.getElementById('zoom-in').onclick = () => { scale = Math.min(scale * 1.2, 2); updateTransform(); updateZoomIndicator(); };
     document.getElementById('zoom-out').onclick = () => { scale = Math.max(scale / 1.2, 0.3); updateTransform(); updateZoomIndicator(); };
     document.getElementById('zoom-reset').onclick = () => { scale = 1; pan = { x: 0, y: 0 }; updateTransform(); updateZoomIndicator(); };
@@ -1060,6 +1055,53 @@ function initEditor() {
     applyCanvasViewMode(getActiveViewMode(), { persist: false });
     updateZoomIndicator();
     validateStory({ showModalReport: false });
+
+    // View mode buttons (proxy to hidden #canvas-view-mode select)
+    document.querySelectorAll('.view-mode-btn').forEach(btn => {
+        btn.onclick = () => {
+            const mode = btn.dataset.mode;
+            if (mode) applyCanvasViewMode(mode);
+        };
+    });
+    syncViewModeButtons(getActiveViewMode());
+
+    // Split-view toggle buttons (proxy to hidden checkboxes)
+    const secEdgesBtn = document.getElementById('toggle-secondary-edges-btn');
+    const critPathBtn = document.getElementById('focus-critical-path-btn');
+    const downstreamBtn = document.getElementById('highlight-full-downstream-btn');
+
+    if (secEdgesBtn) {
+        secEdgesBtn.dataset.active = showSecondaryEdges ? 'true' : 'false';
+        secEdgesBtn.onclick = () => {
+            showSecondaryEdges = !showSecondaryEdges;
+            secEdgesBtn.dataset.active = showSecondaryEdges ? 'true' : 'false';
+            const cb = document.getElementById('toggle-secondary-edges');
+            if (cb) cb.checked = showSecondaryEdges;
+            drawConnections();
+        };
+    }
+    if (critPathBtn) {
+        critPathBtn.dataset.active = editorUiState.focusCriticalPath ? 'true' : 'false';
+        critPathBtn.onclick = () => {
+            editorUiState.focusCriticalPath = !editorUiState.focusCriticalPath;
+            critPathBtn.dataset.active = editorUiState.focusCriticalPath ? 'true' : 'false';
+            const cb = document.getElementById('focus-critical-path');
+            if (cb) cb.checked = editorUiState.focusCriticalPath;
+            saveStoryEditorUiState();
+            drawConnections();
+        };
+    }
+    if (downstreamBtn) {
+        downstreamBtn.dataset.active = highlightFullDownstream ? 'true' : 'false';
+        downstreamBtn.onclick = () => {
+            highlightFullDownstream = !highlightFullDownstream;
+            downstreamBtn.dataset.active = highlightFullDownstream ? 'true' : 'false';
+            const cb = document.getElementById('highlight-full-downstream');
+            if (cb) cb.checked = highlightFullDownstream;
+            refreshDownstreamHighlight();
+            drawConnections();
+        };
+    }
 
     const wrapper = document.getElementById('canvas-wrapper');
     wrapper.ondblclick = e => {
@@ -1171,7 +1213,7 @@ function bindEditorEvents() {
         const isOnNode = Boolean(e.target.closest('.node'));
         const isOnConnectionEditTarget = Boolean(e.target.closest('.connection-path, .connection-label, .node-output'));
         const isOnInteractiveControl = Boolean(e.target.closest('button, input, textarea, select, option, a, label, [contenteditable="true"]'));
-        const isCanvasBackground = e.target === wrapper || e.target === svgCanvas;
+        const isCanvasBackground = e.target === wrapper || e.target === svgCanvas || e.target === nodesContainer;
         const shouldPanWithLeftButton = isLeftButton && !isOnNode && !isOnConnectionEditTarget && !isOnInteractiveControl && (isCanvasBackground || e.shiftKey || isSpacePanning);
 
         if (isMiddleButton || shouldPanWithLeftButton) {
@@ -1236,6 +1278,80 @@ function bindEditorEvents() {
     document.addEventListener('keyup', _boundOnDocKeyUp);
     document.addEventListener('mouseup', _boundOnDocConnectionMouseUp);
 
+    // Scroll-to-zoom on wrapper (covers empty-space clicks too)
+    _boundOnWrapperWheel = e => {
+        e.preventDefault();
+        const wrapperRect = wrapper.getBoundingClientRect();
+        const pointerX = e.clientX - wrapperRect.left;
+        const pointerY = e.clientY - wrapperRect.top;
+        const worldX = (pointerX - pan.x) / scale;
+        const worldY = (pointerY - pan.y) / scale;
+        const factor = e.deltaY < 0 ? 1.1 : 0.9;
+        scale = Math.max(0.3, Math.min(scale * factor, 2));
+        pan.x = pointerX - worldX * scale;
+        pan.y = pointerY - worldY * scale;
+        updateTransform();
+        updateZoomIndicator();
+    };
+    wrapper.addEventListener('wheel', _boundOnWrapperWheel, { passive: false });
+
+    // Touch events — one finger: pan; two fingers: pinch-zoom
+    let _touchPanActive = false;
+    let _lastTouchDist = null;
+    _boundOnTouchStart = e => {
+        if (e.touches.length === 1) {
+            _touchPanActive = true;
+            _lastTouchDist = null;
+            panStart.x = e.touches[0].clientX - pan.x;
+            panStart.y = e.touches[0].clientY - pan.y;
+        } else if (e.touches.length === 2) {
+            _touchPanActive = false;
+            const t1 = e.touches[0], t2 = e.touches[1];
+            _lastTouchDist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+        }
+        if (!e.target.closest('.node, button, input, textarea, select')) e.preventDefault();
+    };
+    _boundOnTouchMove = e => {
+        if (e.touches.length === 1 && _touchPanActive) {
+            pan.x = e.touches[0].clientX - panStart.x;
+            pan.y = e.touches[0].clientY - panStart.y;
+            updateTransform();
+            e.preventDefault();
+        } else if (e.touches.length === 2 && _lastTouchDist !== null) {
+            const t1 = e.touches[0], t2 = e.touches[1];
+            const dist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+            const midX = (t1.clientX + t2.clientX) / 2;
+            const midY = (t1.clientY + t2.clientY) / 2;
+            const wrapperRect = wrapper.getBoundingClientRect();
+            const pointerX = midX - wrapperRect.left;
+            const pointerY = midY - wrapperRect.top;
+            const worldX = (pointerX - pan.x) / scale;
+            const worldY = (pointerY - pan.y) / scale;
+            const factor = dist / _lastTouchDist;
+            scale = Math.max(0.3, Math.min(scale * factor, 2));
+            pan.x = pointerX - worldX * scale;
+            pan.y = pointerY - worldY * scale;
+            updateTransform();
+            updateZoomIndicator();
+            _lastTouchDist = dist;
+            e.preventDefault();
+        }
+    };
+    _boundOnTouchEnd = e => {
+        if (e.touches.length === 0) {
+            _touchPanActive = false;
+            _lastTouchDist = null;
+        } else if (e.touches.length === 1) {
+            _touchPanActive = true;
+            _lastTouchDist = null;
+            panStart.x = e.touches[0].clientX - pan.x;
+            panStart.y = e.touches[0].clientY - pan.y;
+        }
+    };
+    wrapper.addEventListener('touchstart', _boundOnTouchStart, { passive: false });
+    wrapper.addEventListener('touchmove', _boundOnTouchMove, { passive: false });
+    wrapper.addEventListener('touchend', _boundOnTouchEnd);
+
     editorEventsBound = true;
 }
 
@@ -1250,6 +1366,19 @@ function destroyEditor() {
     _boundOnDocKeyDown = null;
     _boundOnDocKeyUp = null;
     _boundOnDocConnectionMouseUp = null;
+
+    const wrapper = document.getElementById('canvas-wrapper');
+    if (wrapper) {
+        if (_boundOnWrapperWheel) wrapper.removeEventListener('wheel', _boundOnWrapperWheel);
+        if (_boundOnTouchStart) wrapper.removeEventListener('touchstart', _boundOnTouchStart);
+        if (_boundOnTouchMove) wrapper.removeEventListener('touchmove', _boundOnTouchMove);
+        if (_boundOnTouchEnd) wrapper.removeEventListener('touchend', _boundOnTouchEnd);
+    }
+    _boundOnWrapperWheel = null;
+    _boundOnTouchStart = null;
+    _boundOnTouchMove = null;
+    _boundOnTouchEnd = null;
+
     editorEventsBound = false;
 }
 
@@ -1642,6 +1771,12 @@ function drawConnections() {
     if (searchInput) applyPassageSearch(searchInput.value || '');
 }
 
+function syncViewModeButtons(activeMode) {
+    document.querySelectorAll('.view-mode-btn').forEach(btn => {
+        btn.dataset.active = (btn.dataset.mode === activeMode) ? 'true' : 'false';
+    });
+}
+
 function applyCanvasViewMode(mode, { persist = true } = {}) {
     if (!VIEW_MODE_ORDER.includes(mode)) return;
     editorUiState.canvasViewMode = mode;
@@ -1652,12 +1787,21 @@ function applyCanvasViewMode(mode, { persist = true } = {}) {
 
     const selector = document.getElementById('canvas-view-mode');
     if (selector) selector.value = mode;
+    syncViewModeButtons(mode);
     const toggleSecondaryEdges = document.getElementById('toggle-secondary-edges');
     if (toggleSecondaryEdges) toggleSecondaryEdges.checked = showSecondaryEdges;
     const focusCriticalPathToggle = document.getElementById('focus-critical-path');
     if (focusCriticalPathToggle) focusCriticalPathToggle.checked = editorUiState.focusCriticalPath;
     const fullDownstreamToggle = document.getElementById('highlight-full-downstream');
     if (fullDownstreamToggle) fullDownstreamToggle.checked = highlightFullDownstream;
+
+    // Sync split-view toggle buttons
+    const secEdgesBtn = document.getElementById('toggle-secondary-edges-btn');
+    if (secEdgesBtn) secEdgesBtn.dataset.active = showSecondaryEdges ? 'true' : 'false';
+    const critPathBtn = document.getElementById('focus-critical-path-btn');
+    if (critPathBtn) critPathBtn.dataset.active = editorUiState.focusCriticalPath ? 'true' : 'false';
+    const dsBtn = document.getElementById('highlight-full-downstream-btn');
+    if (dsBtn) dsBtn.dataset.active = highlightFullDownstream ? 'true' : 'false';
 
     refreshDownstreamHighlight();
     if (persist) saveStoryEditorUiState();
@@ -1922,7 +2066,8 @@ function renderVariables() {
 
             const removeBtn = document.createElement('button');
             removeBtn.type = 'button';
-            removeBtn.textContent = 'Remove';
+            removeBtn.textContent = '−';
+            removeBtn.title = `Remove ${cat}.${key}`;
             removeBtn.className = 'variable-remove';
             removeBtn.onclick = () => {
                 delete variables[cat][key];
