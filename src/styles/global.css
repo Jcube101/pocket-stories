@@ -1,10 +1,10 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
 @import './base.css';
 @import './editor-graph.css';
 @import './player.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
 /* ===== Manual theme overrides =====
    Applied via data-theme attribute on <html>, set by App.tsx.
