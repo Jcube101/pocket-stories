@@ -1152,35 +1152,30 @@ function initEditor() {
     wrapper.ondblclick = e => {
         if (e.target.closest('.node')) return;
 
-        const newIdRaw = prompt('New passage ID', `passage_${Date.now()}`);
-        if (newIdRaw === null) return;
-        const newId = newIdRaw.trim();
-        if (!newId) {
-            alert('Passage ID cannot be empty.');
-            return;
-        }
-        if (window.storyData.passages[newId]) {
-            alert(`Passage "${newId}" already exists.`);
-            return;
-        }
-
-        const newText = prompt('Passage text', 'Write your passage text here...');
-        if (newText === null) return;
+        // Auto-generate a clean passage ID
+        const existingIds = new Set(Object.keys(window.storyData.passages));
+        let counter = existingIds.size + 1;
+        let newId = `passage_${counter}`;
+        while (existingIds.has(newId)) { counter++; newId = `passage_${counter}`; }
 
         const x = Math.max(0, (e.clientX - pan.x) / scale - 160);
         const y = Math.max(0, (e.clientY - pan.y) / scale - 100);
 
         window.storyData.passages[newId] = {
-            text: `${newText}\n`,
+            text: 'Write your passage text here...\n',
             choices: [],
             position: { x, y }
         };
 
-        createNode(newId, newText, Object.keys(window.storyData.passages).length);
+        createNode(newId, '', existingIds.size + 1);
         renderPassageList();
         drawConnections();
         expandCanvasIfNeeded();
         saveState();
+
+        // Immediately open the new node in the inspector for editing
+        const newNode = nodesContainer.querySelector(`.node[data-id="${newId}"]`);
+        if (newNode) selectNodeByElement(newNode);
     };
 }
 
@@ -1520,16 +1515,23 @@ function createNode(id, text, index) {
         }
 
         e.stopPropagation();
+
+        // Select immediately on press — don't wait for click event, which
+        // may not fire if the cursor moves even slightly during mousedown→mouseup.
+        selectNodeByElement(nodeDiv);
+
         const startX = e.clientX;
         const startY = e.clientY;
         const origX = parseFloat(nodeDiv.style.left);
         const origY = parseFloat(nodeDiv.style.top);
+        let hasMoved = false;
 
         nodeDiv.style.zIndex = 100;
 
         const onMouseMove = (moveEvent) => {
             const dx = moveEvent.clientX - startX;
             const dy = moveEvent.clientY - startY;
+            if (Math.abs(dx) > 3 || Math.abs(dy) > 3) hasMoved = true;
             nodeDiv.style.left = `${origX + dx}px`;
             nodeDiv.style.top = `${origY + dy}px`;
             drawConnections();
@@ -1541,29 +1543,32 @@ function createNode(id, text, index) {
             nodeDiv.style.zIndex = '';
             expandCanvasIfNeeded();
 
-            const newX = parseFloat(nodeDiv.style.left);
-            const newY = parseFloat(nodeDiv.style.top);
+            // Only save state if the node actually moved — avoids spurious
+            // undo entries and React re-renders on plain clicks.
+            if (hasMoved) {
+                const newX = parseFloat(nodeDiv.style.left);
+                const newY = parseFloat(nodeDiv.style.top);
 
-            if (!window.storyData.passages[id].position) {
-                window.storyData.passages[id].position = {};
+                if (!window.storyData.passages[id].position) {
+                    window.storyData.passages[id].position = {};
+                }
+                window.storyData.passages[id].position.x = newX;
+                window.storyData.passages[id].position.y = newY;
+                window.storyData.passages[id].position.manualOverride = true;
+
+                saveManualNodePosition(id, newX, newY);
+                drawConnections();
+                saveState();
             }
-            window.storyData.passages[id].position.x = newX;
-            window.storyData.passages[id].position.y = newY;
-            window.storyData.passages[id].position.manualOverride = true;
-
-            saveManualNodePosition(id, newX, newY);
-            drawConnections();
-            saveState();
         };
 
         document.addEventListener('mousemove', onMouseMove);
         document.addEventListener('mouseup', onMouseUp);
     });
 
-    nodeDiv.addEventListener('click', e => {
-        e.stopPropagation();
-        selectNodeByElement(nodeDiv);
-    });
+    // stopPropagation on click prevents the canvas background click handler
+    // from deselecting the node we just selected in mousedown.
+    nodeDiv.addEventListener('click', e => { e.stopPropagation(); });
 
 
     nodeDiv.addEventListener('mouseenter', () => {
