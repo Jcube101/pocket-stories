@@ -21,7 +21,7 @@ npm run deploy    # build + deploy to GitHub Pages
 
 ## Two modes
 
-**Editor** — Visual SVG node-graph editor. Each passage is a node. Connect them with choices. Export your story as YAML.
+**Editor** — Visual SVG node-graph editor. Each passage is a node. Connect them with choices. Three view modes (Author / Logic / Playtest), pan/zoom canvas, node inspector with full choice breakdown, live diagnostics, and YAML export.
 
 **Player** — Animated story reader with typewriter text reveal, staggered choice buttons, and variable state tracking (inventory, relationships, flags).
 
@@ -89,7 +89,7 @@ src/
     StoryEditor.tsx    — React shell for the legacy editor
     StoryList.tsx      — Story selector
   legacy/
-    editor.js          — Node-graph editor engine (2,967 lines, plain JS)
+    editor.js          — Node-graph editor engine (~3,100 lines, plain JS)
   lib/
     storyValidator.ts  — Validates + normalizes YAML story structure
     yamlLoader.ts      — Loads stories via import.meta.glob
@@ -113,9 +113,7 @@ Drop a `.yaml` file into `src/stories/`. The app picks it up automatically via `
 
 ## Known issues
 
-One minor open issue remains. See `known-issues.md` for the full list:
-
-- **Redundant condition in `space_outpost.yaml`** — logically redundant but harmless (Y3)
+All known issues from the initial audit are resolved. See `known-issues.md` for the full history.
 
 ---
 

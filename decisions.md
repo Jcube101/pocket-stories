@@ -97,6 +97,23 @@ Each entry follows the format: **Context → Options → Decision → Rationale*
 
 ---
 
+## Decision 6 — Canvas-wrapper layout strategy
+
+**Status: DECIDED — `position: relative` with flex layout (2026-03-22)**
+
+**Context:** `#canvas-wrapper` was `position: absolute; top: 0; left: 0; width: 100%; height: 100%` in `editor-graph.css`. This caused it to fill the entire `#graph-container`, completely covering `#node-inspector` and making the inspector invisible and unclickable. Meanwhile `player.css` had added `#graph-container { display: flex }` to place canvas and inspector side-by-side — but the absolute positioning in `editor-graph.css` took precedence.
+
+**Options considered:**
+- A) **`position: relative` with flex.** Remove the absolute positioning overrides. The flex layout in `player.css` (`#graph-container { display: flex }`, `#canvas-wrapper { flex: 1; min-width: 0 }`) governs. Canvas children (`#nodes-container`, `#svg-canvas`) remain `position: absolute` relative to the now-`relative` wrapper.
+- B) **Keep absolute, set `z-index` on inspector.** Force `#node-inspector` above canvas-wrapper using z-index. Fragile — stacking context issues when nodes have their own `z-index`.
+- C) **Restructure HTML.** Move `#node-inspector` outside `#graph-container`. Requires changing `StoryEditor.tsx` layout significantly.
+
+**Decision:** Option A. Changed `#canvas-wrapper` to `position: relative; overflow: hidden`. Panning and zooming use CSS transforms on `#nodes-container` / `#svg-canvas`, not scroll — so `overflow: hidden` is correct.
+
+**Rationale:** The flex layout was already correct in `player.css`. The only problem was the stale absolute-position override in `editor-graph.css` fighting it. Option B is a hack that breaks under z-index changes in nodes. Option C is unnecessary restructuring. The correct fix is exactly one CSS property change on one element.
+
+---
+
 ## Non-decisions (things deliberately left open)
 
 **Backend / server-side rendering:** Not under consideration. This is a static site tool. If backend requirements emerge (e.g., story sharing, user accounts), it warrants a separate architectural document.

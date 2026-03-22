@@ -1,6 +1,6 @@
 # Pocket Stories — Known Issues
 
-Bugs and gaps found during the initial codebase audit (2026-03-10). Updated 2026-03-19 after CSS @import hotfix. Each item links to the relevant roadmap item in `roadmap.md`.
+Bugs and gaps found during the initial codebase audit (2026-03-10). Updated 2026-03-19 after CSS @import hotfix. Updated 2026-03-22 after UI overhaul and inspector/diagnostics improvements. Each item links to the relevant roadmap item in `roadmap.md`.
 
 **Status key:** ✅ Fixed | 🔴 Open
 
@@ -104,9 +104,8 @@ Bugs and gaps found during the initial codebase audit (2026-03-10). Updated 2026
 ~~Compound conditions undocumented.~~
 **Fix:** `&&` / `||` / `!` fully supported by `conditionEvaluator.ts` (P2-2). Story YAML cleanup done (P3-5). Compound condition in `river_oath.yaml` verified working.
 
-### Y3 — Redundant condition in `space_outpost.yaml` 🔴 Open
-**File:** `src/stories/space_outpost.yaml:75`
-`condition: "flags.power_restored == true"` — logically redundant but harmless.
+### Y3 — Redundant condition in `space_outpost.yaml` ✅ Resolved (2026-03-22)
+`space_outpost.yaml` replaced with `hearts_and_ashes.yaml` — a long-form love triangle story with ~35 passages, multiple loops, and multiple endings.
 
 ---
 
@@ -122,6 +121,28 @@ Bugs and gaps found during the initial codebase audit (2026-03-10). Updated 2026
 
 ---
 
+## UI overhaul and inspector/diagnostics (2026-03-22)
+
+Issues discovered and fixed during the Phase 4 UI overhaul and Phase 5 inspector/diagnostics pass.
+
+### U3 — "Runtime parser unavailable" in diagnostics ✅ Fixed (P4-5)
+`window.storyParsers` was never set by React. The editor's condition/effect syntax checks always fell through to the "parser unavailable" warning branch.
+**Fix:** `App.tsx` sets `window.storyParsers = { parseCondition, parseEffect }` using `validateConditionSyntax` from `conditionEvaluator.ts` and `parseStoryEffect` from `storyValidator.ts`.
+
+### U4 — Node inspector completely obscured by canvas-wrapper ✅ Fixed (P5-1)
+`#canvas-wrapper` in `editor-graph.css` used `position: absolute; top: 0; left: 0; width: 100%; height: 100%`. This made canvas-wrapper fill the entire `#graph-container`, completely covering `#node-inspector` and making it unclickable and invisible.
+**Fix:** Changed to `position: relative; overflow: hidden`. The parent `#graph-container` flexbox layout in `player.css` (display: flex) now correctly places canvas-wrapper (`flex: 1`) beside node-inspector (`width: 320px`).
+
+### U5 — Node inspector meta panel too sparse ✅ Fixed (P5-1)
+Inspector only showed choice count, conditional count, missing targets, and unreachable status — no detail on individual choices.
+**Fix:** `renderInspectorMeta()` now shows a full per-choice list: choice text, target node (clickable jump link), condition tag, effect tag, plus status badges and char count.
+
+### U6 — Diagnostics not auto-running after edits ✅ Fixed (P5-2)
+The diagnostics panel only ran when the user explicitly clicked "Validate". After editing a node, the panel showed stale results.
+**Fix:** `saveState()` starts a debounced timer (1.2s). On expiry, `validateStory({ showModalReport: false })` runs silently and updates the diagnostics panel and node highlight overlays.
+
+---
+
 ## Audit methodology note
 
-Initial issue list produced by full static analysis in March 2026. Updated after all three phases (P1, P2, P3) completion. Issues numbered by category prefix (B = blocking/broken, U = UX, C = config/tooling, Y = YAML quality, S = styles). Original line numbers referenced the state at commit `f879a6d`.
+Initial issue list produced by full static analysis in March 2026. Updated after all three phases (P1, P2, P3) completion. Updated again 2026-03-22 after Phase 4 (UI overhaul) and Phase 5 (inspector + diagnostics). Issues numbered by category prefix (B = blocking/broken, U = UX, C = config/tooling, Y = YAML quality, S = styles). Original line numbers referenced the state at commit `f879a6d`.

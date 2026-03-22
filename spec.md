@@ -104,10 +104,11 @@ The validator blocks these variable name path segments to prevent prototype poll
 
 - The editor renders a visual node-graph using SVG, where each node represents a passage.
 - Node types are inferred from passage structure: start, dialogue, choice, condition, merge, ending.
-- Three view modes: Author, Logic, Playtest.
-- Supports pan, zoom, auto-layout, and fit-to-view.
-- The inspector panel allows editing passage ID, type, text, and metadata.
-- Diagnostics: validates story structure, detects cycles, and flags unreachable nodes.
+- Three view modes: **Author** (default), **Logic** (shows all edge conditions), **Playtest** (highlights active paths).
+- Canvas interaction: left-click drag on empty canvas background pans; scroll wheel zooms; two-finger pinch-zoom on touch; one-finger drag pans on touch.
+- The **node inspector** panel appears to the right of the canvas. Click any node to open it. Shows passage ID, type, text editor, and a full per-choice breakdown: choice text, target (clickable jump link), condition (amber tag), effect (purple tag), plus status badges and char count.
+- **Split View** section: toggle Show Jump/Return edges, Critical Path highlight, Full Downstream highlight.
+- **Diagnostics**: validates story structure, detects cycles, flags unreachable and no-exit nodes. Also checks: missing title, empty passage text, long passages (>800 chars), self-loop choices, duplicate choice text, undeclared variable references. Auto-runs silently 1.2s after any edit.
 - Undo/redo (max 20 states in memory).
 - Export: downloads current story state as a YAML file.
 - Import: accepts `.yaml`, `.yml`, `.json` files via file input.
@@ -115,7 +116,7 @@ The validator blocks these variable name path segments to prevent prototype poll
 
 ### Mode Switching
 
-The app header has Editor/Player tabs. Switching to Player renders the current loaded story. Editor mutations are synced to React state via `window.onStoryChange` — switching to player mode immediately reflects edits without a reload (B10 fixed, P2-3).
+The app header has **Editor / Player tabs on the left**. The **story selector** (compact `<select>` + Load button) and **theme toggle** are on the right. Switching to Player renders the current loaded story. Editor mutations are synced to React state via `window.onStoryChange` — switching to player mode immediately reflects edits without a reload (B10 fixed, P2-3).
 
 ### Global Window Bridge
 

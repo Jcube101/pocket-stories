@@ -37,9 +37,8 @@ npm run dev          # dev server at http://localhost:5173/pocket-stories/
 npm run build        # tsc + vite build → ./dist
 npm run preview      # preview production build locally
 npm run deploy       # build + push to gh-pages branch
+npm test             # run Vitest suite (conditionEvaluator + storyValidator)
 ```
-
-**There are no tests.** `npm test` will fail. See roadmap P3-1 for the plan to add Vitest.
 
 ---
 
@@ -53,9 +52,9 @@ pocket-stories/
 │   ├── components/
 │   │   ├── PlayerView.tsx       # Canonical interactive story player
 │   │   ├── StoryEditor.tsx      # Editor mode wrapper — dynamically loads legacy/editor.js
-│   │   └── StoryList.tsx        # Story selector sidebar
+│   │   └── StoryList.tsx        # Compact <select> + Load button (renders in app header)
 │   ├── legacy/
-│   │   └── editor.js            # Visual node-graph editor engine (~3,000 lines, plain JS)
+│   │   └── editor.js            # Visual node-graph editor engine (~3,100 lines, plain JS)
 │   ├── lib/
 │   │   ├── conditionEvaluator.ts # Safe tokenizer + recursive descent condition parser
 │   │   ├── storyValidator.ts    # Validates + normalizes story YAML structure
@@ -65,7 +64,7 @@ pocket-stories/
 │       ├── global.css           # Tailwind directives + @imports + theme overrides
 │       ├── base.css             # Resets, body, base element styles
 │       ├── editor-graph.css     # Legacy editor: canvas, nodes, SVG
-│       └── player.css           # Player UI, CSS custom properties, animations
+│       └── player.css           # Player UI, CSS custom properties, animations + 2026 UI overrides
 ├── public/
 │   ├── 404.html                 # GitHub Pages SPA redirect (prevents 404 on deep links)
 │   └── stories/                 # Static copies of YAML files (served as assets)
@@ -83,6 +82,16 @@ pocket-stories/
 
 ---
 
+## App Header Layout (2026 UI)
+
+The header is a flex row:
+- **Left:** `h1` title → Editor tab → Player tab
+- **Right:** story `<select>` + Load button → theme toggle (Auto/Dark/Light)
+
+`StoryList.tsx` renders the `<select>` + Load button only — it is mounted inside the header, not as a standalone panel.
+
+---
+
 ## Two Modes
 
 - **Editor mode** — `<StoryEditor>` dynamically imports `src/legacy/editor.js` (plain JS, SVG node-graph). Connected to React via `window.*` globals.
@@ -90,9 +99,21 @@ pocket-stories/
 
 ---
 
+## Editor Sidebar Sections (top → bottom)
+
+1. **Variables** — live variable state; remove button is `−` (32×32px icon)
+2. **Passages** — passage list
+3. **Tools** — 2×2 button grid (Add Passage, Auto-Layout, Fit View, Export YAML)
+4. **Diagnostics** — live validation panel; auto-updates 1.2s after each save
+5. **Canvas Controls** — zoom %, fit, center, reset; view mode toggle (Author/Logic/Playtest)
+6. **Split View** — Show Jump/Return edges, Critical Path, Full Downstream toggles
+7. **Stories** — story list at bottom (also accessible via header `<select>`)
+
+---
+
 ## Known Issues
 
-All Phase 1, 2, and 3 items are complete. One minor open issue remains: Y3 (redundant condition in `space_outpost.yaml` — harmless). CSS @import ordering bug (S2) introduced by P3-2 was hotfixed 2026-03-19.
+All Phase 1–5 items are complete. No open issues remain. CSS @import ordering bug (S2) introduced by P3-2 was hotfixed 2026-03-19. Node inspector overlap (U4) fixed 2026-03-22.
 
 Full history: `known-issues.md`
 
@@ -130,6 +151,7 @@ window.setStoryStatus(msg, type)
 window.loadStoryByPath(path, label)
 window.setSidebarCollapsed(bool)
 window.toggleSidebarCollapsed()
+window.storyParsers                       // { parseCondition, parseEffect } — set by App.tsx for diagnostics
 ```
 
 ---
@@ -137,7 +159,7 @@ window.toggleSidebarCollapsed()
 ## Story Format (YAML)
 
 ```yaml
-title: "My Story"          # optional but should be set
+title: "My Story"          # required — diagnostics warn if missing
 variables:
   inventory:
     key: false             # any primitive
@@ -160,6 +182,8 @@ passages:
 ```
 
 Conditions support: `==`, `!=`, `>=`, `<=`, `>`, `<`, `&&`, `||`, `!`. Evaluated by the safe parser in `src/lib/conditionEvaluator.ts` — no `eval` or `new Function`.
+
+**One `effect` per choice only.** YAML does not allow duplicate keys — a second `effect:` key silently overwrites the first.
 
 ---
 
@@ -190,10 +214,45 @@ Conditions support: `==`, `!=`, `>=`, `<=`, `>`, `<`, `&&`, `||`, `!`. Evaluated
 - `applyEffect`: failures collected in `effectErrors` state → shown as dismissible overlay
 
 ### `src/legacy/editor.js`
-- ~3,000 lines of plain JS. Initialized via `initEditor()`, exported as named ES export.
+- ~3,100 lines of plain JS. Initialized via `initEditor()`, exported as named ES export.
 - `destroyEditor()` exported — removes all document event listeners, resets `editorEventsBound`
 - Calls `window.onStoryChange(storyData)` after every mutation and after undo/redo
 - `jsyaml.dump()` / `jsyaml.load()` both work — `js-yaml` imported at top of file
+- `_preservedSelectedId` — module-level variable; stores selected node ID before `initEditor()` re-runs and restores it after. Required because `saveState()` triggers `window.onStoryChange` → React re-render → `initEditor()`.
+- `_autoDiagnosticsTimer` — holds the debounce timer for auto-diagnostics after `saveState()`
+- `validateStory({ showModalReport })` — runs all checks; `showModalReport: false` for auto-silent runs
+
+### `src/styles/editor-graph.css`
+- `#canvas-wrapper { position: relative; overflow: hidden }` — **must stay `position: relative`**. If changed back to `position: absolute`, it will cover `#node-inspector` entirely (see Decision 6 and U4 in `known-issues.md`).
+- Panning and zooming use CSS `transform` on `#nodes-container` / `#svg-canvas` — not scroll.
+
+### `src/styles/player.css`
+- Contains all 2026 UI overrides (sidebar layout, tools grid, view mode buttons, inspector meta styles, diagnostics styles).
+- `#graph-container { display: flex }` — places `#canvas-wrapper` (flex: 1) beside `#node-inspector` (width: 320px).
+
+---
+
+## Diagnostics Checks (as of 2026-03-22)
+
+`validateStory()` in `editor.js` checks:
+
+| Check | Severity |
+|---|---|
+| Missing `start` passage | error |
+| Choice missing text | error |
+| Choice missing target | error |
+| Dangling reference (target passage doesn't exist) | error |
+| Condition syntax error | warning |
+| Effect syntax error | warning |
+| Unreachable node | warning |
+| No-exit node (no choices, not start) | warning |
+| Missing story title | warning |
+| Empty passage text | warning |
+| Self-loop choice (targets own passage) | warning |
+| Duplicate choice text within same passage | warning |
+| Undeclared variable reference in condition | warning |
+| Long passage text (>800 chars) | info |
+| Cycle detected | info |
 
 ---
 
@@ -220,6 +279,7 @@ fonts:    playerSans, playerSerif
 | `pocket_stories_imported_entries_v1` | JSON array of `{ id, label, raw, source }` |
 | `pocketstories_layout_<hash>` | Canvas node positions for editor |
 | `pocketstories_layout_<hash>_ui` | Editor UI state (collapsed nodes, view mode) |
+| `pocket_stories_theme_v1` | Theme preference: `'auto'` \| `'dark'` \| `'light'` |
 
 ---
 
@@ -257,3 +317,9 @@ Branches follow `claude/<task-slug>-<session-id>`. Always push to the branch spe
 8. **Prior Codex commits** are identifiable by branch names like `codex/…`. Recent ones introduced Tailwind, Framer Motion, `PlayerView`, and animated passage reveal.
 
 9. **Dark mode toggle** — `App.tsx` cycles `theme` state (auto/dark/light), writes `data-theme` to `<html>`. CSS handles the rest via `html[data-theme="dark"]` / `html[data-theme="light"]` overrides in `global.css`. Persisted to `localStorage` key `pocket_stories_theme_v1`.
+
+10. **`#canvas-wrapper` must stay `position: relative`** — changing it back to `position: absolute` will make the node inspector invisible and unclickable (U4). The panning/zooming is done via CSS transform on `#nodes-container`, not via scroll. See `decisions.md` Decision 6.
+
+11. **`window.storyParsers`** must be set by `App.tsx` before the editor is initialized. Without it, all condition/effect syntax diagnostics fall through to "parser unavailable". It is set in a `useEffect` that runs after mount.
+
+12. **`_preservedSelectedId` pattern** — `selectNodeByElement()` stores the node ID in this module-level variable; `initEditor()` restores the selection at the end. Never remove this without also removing the `saveState()` → `onStoryChange` → re-render → `initEditor()` chain.
