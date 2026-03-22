@@ -1,6 +1,111 @@
 import { useEffect, useRef, useState } from 'react';
 import type { StoryData } from '../lib/storyValidator';
 
+function HelpModal({ onClose }: { onClose: () => void }) {
+  return (
+    <div
+      style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div style={{ background: 'var(--surface-card, #fff)', color: 'var(--text-primary, #1f2937)', borderRadius: '14px', maxWidth: '680px', width: '100%', maxHeight: '85vh', display: 'flex', flexDirection: 'column', boxShadow: '0 24px 60px rgba(0,0,0,0.35)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem 1.25rem', borderBottom: '1px solid var(--border-subtle, #e2e8f0)' }}>
+          <h2 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 700 }}>Pocket Stories — Editor Guide</h2>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: '1.4rem', cursor: 'pointer', lineHeight: 1, padding: '0 0.25rem' }} aria-label="Close help">✕</button>
+        </div>
+        <div style={{ overflowY: 'auto', padding: '1.25rem', fontSize: '0.88rem', lineHeight: 1.65 }}>
+
+          <h3 style={{ marginTop: 0 }}>1. Getting Started</h3>
+          <p>Pocket Stories has two modes: <strong>Editor</strong> (build your story) and <strong>Player</strong> (play it). Switch between them using the tabs at the top-left of the header. Load a built-in story or import your own YAML file to begin.</p>
+
+          <h3>2. Creating Nodes (Passages)</h3>
+          <ul>
+            <li><strong>Double-click</strong> on any empty area of the canvas to instantly create a new passage node. It appears at your cursor position, ready to edit in the inspector.</li>
+            <li>The node gets an auto-generated ID (e.g. <code>passage_1</code>). Rename it in the inspector's <em>Passage ID</em> field.</li>
+            <li>Every story must have a <strong><code>start</code></strong> passage — rename one of your nodes to <code>start</code> to set the entry point.</li>
+          </ul>
+
+          <h3>3. Connecting Nodes (Choices)</h3>
+          <ul>
+            <li>Drag from the <strong>circle handle</strong> on the right edge of a node and release on another node to create a choice connection.</li>
+            <li>A prompt will ask for the choice label text (what the player reads).</li>
+            <li>Connections are shown as arrows on the canvas. Click an arrow to select it; right-click to delete it.</li>
+          </ul>
+
+          <h3>4. The Node Inspector</h3>
+          <ul>
+            <li><strong>Click any node</strong> (or click it in the Passages list) to open it in the inspector panel on the right.</li>
+            <li>Edit the passage ID, node type, and text directly in the inspector. Changes save automatically.</li>
+            <li>The <em>Choices</em> section shows each outgoing choice with its target, condition, and effect as coloured tags.</li>
+            <li>Click a <strong>target link</strong> in the choices list to jump to that node on the canvas.</li>
+          </ul>
+
+          <h3>5. Conditions &amp; Effects</h3>
+          <p>Add <code>condition</code> and <code>effect</code> to choices in your YAML to create branching logic.</p>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
+            <thead><tr style={{ background: 'rgba(0,0,0,0.06)' }}><th style={{ textAlign: 'left', padding: '4px 8px' }}>What</th><th style={{ textAlign: 'left', padding: '4px 8px' }}>Syntax</th><th style={{ textAlign: 'left', padding: '4px 8px' }}>Example</th></tr></thead>
+            <tbody>
+              <tr><td style={{ padding: '4px 8px' }}>Show/hide choice</td><td style={{ padding: '4px 8px' }}>condition</td><td style={{ padding: '4px 8px' }}><code>inventory.key == true</code></td></tr>
+              <tr style={{ background: 'rgba(0,0,0,0.03)' }}><td style={{ padding: '4px 8px' }}>Set a flag</td><td style={{ padding: '4px 8px' }}>effect</td><td style={{ padding: '4px 8px' }}><code>flags.door_open = true</code></td></tr>
+              <tr><td style={{ padding: '4px 8px' }}>Adjust relationship</td><td style={{ padding: '4px 8px' }}>effect</td><td style={{ padding: '4px 8px' }}><code>relationships.Guard += 1</code></td></tr>
+              <tr style={{ background: 'rgba(0,0,0,0.03)' }}><td style={{ padding: '4px 8px' }}>Pick up item</td><td style={{ padding: '4px 8px' }}>effect</td><td style={{ padding: '4px 8px' }}><code>inventory.key = true</code></td></tr>
+            </tbody>
+          </table>
+          <p style={{ marginTop: '0.5rem' }}>Condition operators: <code>== != &gt;= &lt;= &gt; &lt; &amp;&amp; || !</code></p>
+          <p><strong>One effect per choice</strong> — YAML doesn't allow duplicate keys.</p>
+
+          <h3>6. Variables</h3>
+          <p>Declare variables in the <strong>Global Variables</strong> sidebar panel before using them in conditions or effects. Three types:</p>
+          <ul>
+            <li><strong>Inventory</strong> — any primitive value, set with <code>=</code></li>
+            <li><strong>Relationships</strong> — numeric only, adjusted with <code>+=</code> or <code>-=</code></li>
+            <li><strong>Flags</strong> — boolean only, set with <code>= true</code> or <code>= false</code></li>
+          </ul>
+
+          <h3>7. Diagnostics</h3>
+          <p>The <strong>Diagnostics</strong> panel auto-runs 1.2 seconds after every edit. It checks for:</p>
+          <ul>
+            <li>Missing <code>start</code> passage, dangling references, missing choice targets</li>
+            <li>Unreachable nodes, no-exit nodes, self-loops, duplicate choice text</li>
+            <li>Condition/effect syntax errors, undeclared variable references</li>
+            <li>Missing story title, empty passage text, very long passages (&gt;800 chars)</li>
+          </ul>
+          <p>Click <strong>Jump</strong> on any issue to pan the canvas to the problem node. Use <strong>Autofix</strong> buttons for safe one-click repairs.</p>
+
+          <h3>8. Canvas Controls</h3>
+          <ul>
+            <li><strong>Pan:</strong> left-click drag on empty canvas space (or hold Space + drag)</li>
+            <li><strong>Zoom:</strong> scroll wheel, or use Zoom In / Zoom Out buttons</li>
+            <li><strong>Fit All:</strong> zoom to show every node at once</li>
+            <li><strong>Auto Layout:</strong> automatically arrange all nodes in a readable graph</li>
+            <li><strong>View Mode:</strong> Author (default), Logic (shows all edge labels), Playtest (highlights traversable paths)</li>
+          </ul>
+
+          <h3>9. Keyboard Shortcuts</h3>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
+            <thead><tr style={{ background: 'rgba(0,0,0,0.06)' }}><th style={{ textAlign: 'left', padding: '4px 8px' }}>Shortcut</th><th style={{ textAlign: 'left', padding: '4px 8px' }}>Action</th></tr></thead>
+            <tbody>
+              <tr><td style={{ padding: '4px 8px' }}><code>Ctrl+Z</code></td><td style={{ padding: '4px 8px' }}>Undo</td></tr>
+              <tr style={{ background: 'rgba(0,0,0,0.03)' }}><td style={{ padding: '4px 8px' }}><code>Ctrl+Y</code> / <code>Ctrl+Shift+Z</code></td><td style={{ padding: '4px 8px' }}>Redo</td></tr>
+              <tr><td style={{ padding: '4px 8px' }}><code>Space + drag</code></td><td style={{ padding: '4px 8px' }}>Pan canvas</td></tr>
+              <tr style={{ background: 'rgba(0,0,0,0.03)' }}><td style={{ padding: '4px 8px' }}><code>Alt+C</code></td><td style={{ padding: '4px 8px' }}>Collapse all nodes</td></tr>
+              <tr><td style={{ padding: '4px 8px' }}><code>Alt+E</code></td><td style={{ padding: '4px 8px' }}>Expand all nodes</td></tr>
+              <tr style={{ background: 'rgba(0,0,0,0.03)' }}><td style={{ padding: '4px 8px' }}><code>Alt+M</code></td><td style={{ padding: '4px 8px' }}>Cycle view mode</td></tr>
+              <tr><td style={{ padding: '4px 8px' }}><code>Double-click canvas</code></td><td style={{ padding: '4px 8px' }}>Create new passage node</td></tr>
+            </tbody>
+          </table>
+
+          <h3>10. Exporting &amp; Playing</h3>
+          <p>Click <strong>Export YAML</strong> in the Tools section to download your story as a <code>.yaml</code> file. Switch to <strong>Player</strong> mode at any time to play the current state of your story — changes from the editor are reflected immediately.</p>
+
+        </div>
+        <div style={{ padding: '0.75rem 1.25rem', borderTop: '1px solid var(--border-subtle, #e2e8f0)', textAlign: 'right' }}>
+          <button onClick={onClose} style={{ padding: '0.4rem 1.1rem', borderRadius: '8px', border: '1px solid var(--border-subtle, #cbd5e1)', background: 'var(--button-bg, #fff)', cursor: 'pointer', fontWeight: 600 }}>Close</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 type Props = {
   story: StoryData | null;
   activeStoryId: string;
@@ -11,6 +116,7 @@ type Props = {
 
 export function StoryEditor({ story, activeStoryId, setStoryStatus, onLoadStoryByPath, onStoryChange }: Props) {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
   const destroyRef = useRef<(() => void) | undefined>(undefined);
 
   useEffect(() => {
@@ -77,7 +183,27 @@ export function StoryEditor({ story, activeStoryId, setStoryStatus, onLoadStoryB
       >
         {isSidebarCollapsed ? '▶' : '◀'}
       </button>
+      {showHelp && <HelpModal onClose={() => setShowHelp(false)} />}
+
       <div id="sidebar" className={isSidebarCollapsed ? 'hidden' : ''}>
+
+        {/* 0. Help & Guide */}
+        <section className="sidebar-section help-toc-section">
+          <h2>Help &amp; Guide</h2>
+          <ol className="help-toc">
+            <li>Getting Started</li>
+            <li>Creating Nodes (Passages)</li>
+            <li>Connecting Nodes (Choices)</li>
+            <li>The Node Inspector</li>
+            <li>Conditions &amp; Effects</li>
+            <li>Variables</li>
+            <li>Diagnostics</li>
+            <li>Canvas Controls</li>
+            <li>Keyboard Shortcuts</li>
+            <li>Exporting &amp; Playing</li>
+          </ol>
+          <button className="help-read-more-btn" onClick={() => setShowHelp(true)}>Read more →</button>
+        </section>
 
         {/* 1. Global Variables */}
         <section className="sidebar-section">
