@@ -114,6 +114,23 @@ Each entry follows the format: **Context → Options → Decision → Rationale*
 
 ---
 
+## Decision 7 — Node selection event: mousedown vs. click
+
+**Status: DECIDED — `mousedown` (2026-03-22)**
+
+**Context:** Node selection (opening the inspector) was wired to the `click` event. Browsers only fire `click` when the pointer does not move between `mousedown` and `mouseup`. Authors frequently lost inspector focus because any tiny cursor movement during a press prevented the click from registering.
+
+**Options considered:**
+- A) **`mousedown`.** Select immediately on press. Feels instantaneous. The `click` handler is kept but only calls `e.stopPropagation()` to prevent the canvas background handler from deselecting on release.
+- B) **`pointerdown`.** Same semantics as `mousedown` but also works for touch. The existing touch pan logic already uses separate touch event listeners — adding `pointerdown` would overlap and risk double-firing.
+- C) **`mouseup`.** Fires after movement, so drag-end would still select. Feels slightly sluggish and selects even after a long drag, which is unexpected.
+
+**Decision:** Option A. `selectNodeByElement()` is called in the node's `mousedown` handler, immediately after the `node-output` connector check.
+
+**Rationale:** `mousedown` is the standard interaction primitive for selection in node-graph editors (Figma, draw.io, etc.). Option B is redundant given the existing touch layer. Option C selects after every drag, which is surprising. The `stopPropagation` in the `click` handler cleanly prevents the canvas background's deselect-on-click from fighting the selection.
+
+---
+
 ## Non-decisions (things deliberately left open)
 
 **Backend / server-side rendering:** Not under consideration. This is a static site tool. If backend requirements emerge (e.g., story sharing, user accounts), it warrants a separate architectural document.

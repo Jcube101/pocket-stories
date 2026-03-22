@@ -141,6 +141,22 @@ Inspector only showed choice count, conditional count, missing targets, and unre
 The diagnostics panel only ran when the user explicitly clicked "Validate". After editing a node, the panel showed stale results.
 **Fix:** `saveState()` starts a debounced timer (1.2s). On expiry, `validateStory({ showModalReport: false })` runs silently and updates the diagnostics panel and node highlight overlays.
 
+## UX improvements (2026-03-22)
+
+Issues discovered and fixed during the Phase 6 UX improvements pass.
+
+### U7 — Node creation requires two blocking prompt() dialogs ✅ Fixed (P6-1)
+Double-clicking the canvas called `prompt()` twice — once for the passage ID (pre-filled with a `Date.now()` timestamp) and once for the text. Authors had to dismiss both dialogs before the node appeared.
+**Fix:** Double-click now creates a node immediately with an auto-generated sequential ID (`passage_1`, `passage_2`, …) and placeholder text. No prompts. The new node opens in the inspector instantly.
+
+### U8 — Inspector fails to open when cursor moves between mousedown and mouseup ✅ Fixed (P6-2)
+Node selection relied on the `click` event. Browsers suppress `click` if the pointer moves even a few pixels between `mousedown` and `mouseup`, meaning any slight hand movement during a click would silently fail to open the inspector. Additionally, `saveState()` was called on every `mouseup` regardless of movement, causing unnecessary React re-renders and undo entries.
+**Fix:** Selection now happens in `mousedown` (always fires). `saveState()` is only called when `hasMoved` is true (movement threshold: 3 px). Plain node clicks no longer push undo history.
+
+### U9 — No in-editor help or onboarding documentation ✅ Fixed (P6-3)
+New users had no guidance on how to create nodes, connect them, or use conditions and effects — there was no help text anywhere in the UI.
+**Fix:** Added a **Help & Guide** section at the top of the sidebar with a 10-item table of contents. A **"Read more →"** button opens a full help modal covering all editor features with examples and a keyboard shortcuts table.
+
 ---
 
 ## Audit methodology note

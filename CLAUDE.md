@@ -101,9 +101,10 @@ The header is a flex row:
 
 ## Editor Sidebar Sections (top → bottom)
 
+0. **Help & Guide** — compact 10-item TOC; "Read more →" opens full help modal
 1. **Variables** — live variable state; remove button is `−` (32×32px icon)
 2. **Passages** — passage list
-3. **Tools** — 2×2 button grid (Add Passage, Auto-Layout, Fit View, Export YAML)
+3. **Tools** — 2×2 button grid (Branching Script, Export YAML, Validate, Play Story)
 4. **Diagnostics** — live validation panel; auto-updates 1.2s after each save
 5. **Canvas Controls** — zoom %, fit, center, reset; view mode toggle (Author/Logic/Playtest)
 6. **Split View** — Show Jump/Return edges, Critical Path, Full Downstream toggles
@@ -113,7 +114,7 @@ The header is a flex row:
 
 ## Known Issues
 
-All Phase 1–5 items are complete. No open issues remain. CSS @import ordering bug (S2) introduced by P3-2 was hotfixed 2026-03-19. Node inspector overlap (U4) fixed 2026-03-22.
+All Phase 1–6 items are complete. No open issues remain. CSS @import ordering bug (S2) introduced by P3-2 was hotfixed 2026-03-19. Node inspector overlap (U4) fixed 2026-03-22. Inspector click reliability (U7/U8) fixed 2026-03-22.
 
 Full history: `known-issues.md`
 
@@ -221,6 +222,8 @@ Conditions support: `==`, `!=`, `>=`, `<=`, `>`, `<`, `&&`, `||`, `!`. Evaluated
 - `_preservedSelectedId` — module-level variable; stores selected node ID before `initEditor()` re-runs and restores it after. Required because `saveState()` triggers `window.onStoryChange` → React re-render → `initEditor()`.
 - `_autoDiagnosticsTimer` — holds the debounce timer for auto-diagnostics after `saveState()`
 - `validateStory({ showModalReport })` — runs all checks; `showModalReport: false` for auto-silent runs
+- **Double-click canvas** — creates a node instantly with auto-generated sequential ID and placeholder text; no prompts; immediately opens in inspector
+- **Node mousedown** — calls `selectNodeByElement()` immediately so inspector opens on press; `saveState()` only fires if `hasMoved` (threshold 3px), preventing spurious re-renders on plain clicks
 
 ### `src/styles/editor-graph.css`
 - `#canvas-wrapper { position: relative; overflow: hidden }` — **must stay `position: relative`**. If changed back to `position: absolute`, it will cover `#node-inspector` entirely (see Decision 6 and U4 in `known-issues.md`).
@@ -323,3 +326,9 @@ Branches follow `claude/<task-slug>-<session-id>`. Always push to the branch spe
 11. **`window.storyParsers`** must be set by `App.tsx` before the editor is initialized. Without it, all condition/effect syntax diagnostics fall through to "parser unavailable". It is set in a `useEffect` that runs after mount.
 
 12. **`_preservedSelectedId` pattern** — `selectNodeByElement()` stores the node ID in this module-level variable; `initEditor()` restores the selection at the end. Never remove this without also removing the `saveState()` → `onStoryChange` → re-render → `initEditor()` chain.
+
+13. **Node selection is in `mousedown`, not `click`** — `click` does not fire if the cursor moves between press and release. `selectNodeByElement()` is called in the node's `mousedown` handler. The `click` handler only calls `e.stopPropagation()` to prevent the canvas background from deselecting. Do not move selection back to `click`.
+
+14. **`saveState()` only fires on actual node moves** — The node `onMouseUp` handler checks `hasMoved` (movement > 3px) before calling `saveState()`. This prevents every node click from pushing an undo entry and triggering a React re-render via `onStoryChange`.
+
+15. **Help modal is a React component in `StoryEditor.tsx`** — `HelpModal` is defined at the top of the file (before the `StoryEditor` component). `showHelp` state is in `StoryEditor`. The `HelpModal` renders as a fixed full-screen overlay. It does not use a portal — it renders inside the editor's DOM tree, which is fine since it's `position: fixed`.

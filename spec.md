@@ -106,7 +106,8 @@ The validator blocks these variable name path segments to prevent prototype poll
 - Node types are inferred from passage structure: start, dialogue, choice, condition, merge, ending.
 - Three view modes: **Author** (default), **Logic** (shows all edge conditions), **Playtest** (highlights active paths).
 - Canvas interaction: left-click drag on empty canvas background pans; scroll wheel zooms; two-finger pinch-zoom on touch; one-finger drag pans on touch.
-- The **node inspector** panel appears to the right of the canvas. Click any node to open it. Shows passage ID, type, text editor, and a full per-choice breakdown: choice text, target (clickable jump link), condition (amber tag), effect (purple tag), plus status badges and char count.
+- **Creating a node:** double-click on any empty canvas area to instantly place a new passage with an auto-generated ID and placeholder text. The node opens in the inspector immediately.
+- The **node inspector** panel appears to the right of the canvas. Click any node (or press it — selection fires on `mousedown`) to open it. Shows passage ID, type, text editor, and a full per-choice breakdown: choice text, target (clickable jump link), condition (amber tag), effect (purple tag), plus status badges and char count.
 - **Split View** section: toggle Show Jump/Return edges, Critical Path highlight, Full Downstream highlight.
 - **Diagnostics**: validates story structure, detects cycles, flags unreachable and no-exit nodes. Also checks: missing title, empty passage text, long passages (>800 chars), self-loop choices, duplicate choice text, undeclared variable references. Auto-runs silently 1.2s after any edit.
 - Undo/redo (max 20 states in memory).

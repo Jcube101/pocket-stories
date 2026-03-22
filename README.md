@@ -21,7 +21,7 @@ npm run deploy    # build + deploy to GitHub Pages
 
 ## Two modes
 
-**Editor** — Visual SVG node-graph editor. Each passage is a node. Connect them with choices. Three view modes (Author / Logic / Playtest), pan/zoom canvas, node inspector with full choice breakdown, live diagnostics, and YAML export.
+**Editor** — Visual SVG node-graph editor. Double-click the canvas to create a passage node instantly. Connect nodes by dragging from the circle handle on the right edge. Three view modes (Author / Logic / Playtest), pan/zoom canvas, node inspector with full choice breakdown, live diagnostics, YAML export, and a built-in help guide.
 
 **Player** — Animated story reader with typewriter text reveal, staggered choice buttons, and variable state tracking (inventory, relationships, flags).
 

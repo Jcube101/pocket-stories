@@ -203,11 +203,32 @@ Implemented 2026-03-22 (branch `claude/create-claude-md-ZAKIr`).
 - Auto-run diagnostics (debounced 1.2s) after every `saveState()` mutation — no modal (U6)
 - Richer panel: severity icons (✖/⚠/ℹ), colored count pills, green "✓ No issues found" when clean
 
-### P5-3 Replace `space_outpost.yaml` with `hearts_and_ashes.yaml` — *DONE*
+### P5-3 Replace `space_outpost.yaml` with a richer demo story — 🔴 Deferred to Phase 6
 
-- Replaced the 8-passage sci-fi demo with a ~35-passage love triangle narrative
-- Features: multiple loops, multiple endings, `relationships` numeric tracking, `flags` state, conditional paths
-- Resolves Y3 (redundant condition in old `space_outpost.yaml`)
+- Deferred in favour of UX fixes; `space_outpost.yaml` remains in place for now
+
+---
+
+## Phase 6 — UX Improvements ✅ COMPLETE
+
+Implemented 2026-03-22 (branch `claude/ux-improvements-ZAKIr`).
+
+### P6-1 Streamline node creation — *DONE*
+
+- Double-click on empty canvas now creates a passage instantly with an auto-generated ID (`passage_1`, `passage_2`, …) and placeholder text — no more two-prompt interruption
+- New node is immediately selected and opened in the inspector for editing
+- Auto-ID counter skips any IDs already in use
+
+### P6-2 Fix inspector opening reliability — *DONE*
+
+- Inspector now opens on `mousedown` rather than `click` — `click` may not fire if the cursor moves even a pixel between press and release (U7)
+- `saveState()` is only called when a node actually moved (`hasMoved` flag, threshold 3px) — eliminates spurious undo entries and React re-renders on plain node clicks (U8)
+
+### P6-3 Add in-editor help system — *DONE*
+
+- New **Help & Guide** section at the top of the sidebar, showing a numbered 10-item table of contents
+- **"Read more →"** button opens a full modal covering: getting started, node creation, connections, inspector, conditions/effects, variables, diagnostics, canvas controls, keyboard shortcuts, and export/play
+- Modal closes on backdrop click or the Close button
 
 ---
 
