@@ -232,6 +232,31 @@ Implemented 2026-03-22 (branch `claude/ux-improvements-ZAKIr`).
 
 ---
 
+## Phase 7 — Inspector Choice Editor + UX Polish ✅ COMPLETE
+
+Implemented 2026-03-22 (branch `claude/inspector-choice-editor-ZAKIr`).
+
+### P7-1 Choice editor in inspector — *DONE*
+
+- `renderInspectorMeta()` rewritten: each choice now has editable input fields for text, target (with datalist autocomplete of all passage IDs), condition, and effect
+- Delete button (✕) per choice row removes the choice and updates the canvas immediately
+- **+ Add Choice** button appends a new empty row and focuses the text field
+- All changes commit to `storyData` and push an undo entry on blur
+
+### P7-2 Node ID rename UX improvements — *DONE*
+
+- **Enter key** commits the rename (blur previously required)
+- **Escape** cancels the rename and restores the original ID
+- `alert()` replaced with an inline `<small>` error below the input field
+- Input validation: ID must match `[a-zA-Z0-9_-]+`; inline error clears on next keystroke
+- All `target:` references across all passages are updated on rename (was already working; now surfaced clearly)
+
+### P7-3 Raise undo/redo limit — *DONE*
+
+- `MAX_HISTORY` bumped from 20 → 100 steps
+
+---
+
 ## Architectural Decisions
 
 See `decisions.md` for the five decisions that must be made before Phase 2 begins:

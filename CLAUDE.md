@@ -114,7 +114,7 @@ The header is a flex row:
 
 ## Known Issues
 
-All Phase 1–6 items are complete. No open issues remain. CSS @import ordering bug (S2) introduced by P3-2 was hotfixed 2026-03-19. Node inspector overlap (U4) fixed 2026-03-22. Inspector click reliability (U7/U8) fixed 2026-03-22.
+All Phase 1–7 items are complete. No open issues remain. CSS @import ordering bug (S2) introduced by P3-2 was hotfixed 2026-03-19. Node inspector overlap (U4) fixed 2026-03-22. Inspector click reliability (U7/U8) fixed 2026-03-22. Choice editor in inspector, ID rename UX polish, and undo limit raised to 100 (P7, 2026-03-22).
 
 Full history: `known-issues.md`
 

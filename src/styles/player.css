@@ -456,65 +456,117 @@
     font-weight: 600;
 }
 
-.inspector-choices-list {
+/* Choice editor */
+.inspector-choices-editor {
     display: flex;
     flex-direction: column;
-    gap: 0.45rem;
-    margin-top: 0.4rem;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
 }
 
-.inspector-choice-row {
+.inspector-choice-editor {
     background: rgba(148,163,184,0.1);
+    border: 1px solid rgba(148,163,184,0.2);
     border-radius: 8px;
-    padding: 0.45rem 0.55rem;
-    font-size: 0.8rem;
+    padding: 0.45rem 0.5rem;
     display: flex;
     flex-direction: column;
-    gap: 0.25rem;
+    gap: 0.3rem;
 }
 
-.inspector-choice-num {
+.ice-row-main {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+}
+
+.ice-row-meta {
+    display: flex;
+    gap: 0.3rem;
+}
+
+.ice-num {
     font-weight: 700;
-    opacity: 0.6;
     font-size: 0.72rem;
+    opacity: 0.55;
+    flex-shrink: 0;
+    width: 1.2rem;
 }
 
-.inspector-choice-text {
-    font-weight: 600;
-    line-height: 1.3;
-    word-break: break-word;
+.ice-text {
+    flex: 2;
+    min-width: 0;
+    font-size: 0.78rem;
+    padding: 0.18rem 0.35rem;
+    border-radius: 4px;
+    border: 1px solid #cbd5e1;
+    background: #fff;
+    color: inherit;
 }
 
-.inspector-choice-target { font-size: 0.78rem; }
-
-.inspector-target-link {
-    color: #2563eb;
-    cursor: pointer;
-    font-weight: 600;
-    text-decoration: underline dotted;
+.ice-target {
+    flex: 1;
+    min-width: 0;
+    font-size: 0.78rem;
+    padding: 0.18rem 0.35rem;
+    border-radius: 4px;
+    border: 1px solid #cbd5e1;
+    background: #fff;
+    color: inherit;
+    font-family: monospace;
 }
 
-.inspector-target-missing { color: #dc2626; font-weight: 600; }
+.ice-cond, .ice-effect {
+    flex: 1;
+    min-width: 0;
+    font-size: 0.72rem;
+    padding: 0.14rem 0.3rem;
+    border-radius: 4px;
+    border: 1px solid #e2e8f0;
+    background: #f8fafc;
+    color: inherit;
+    font-family: monospace;
+}
 
-.inspector-tag {
-    display: inline-block;
-    border-radius: 5px;
-    padding: 0.1rem 0.4rem;
+.ice-cond { border-left: 3px solid #d97706; }
+.ice-effect { border-left: 3px solid #7c3aed; }
+
+.ice-delete {
+    flex-shrink: 0;
+    width: 22px;
+    height: 22px;
+    border-radius: 4px;
+    border: none;
+    background: transparent;
+    color: #94a3b8;
     font-size: 0.7rem;
-    font-weight: 600;
-    margin-top: 0.15rem;
-    max-width: 100%;
-    word-break: break-all;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
 }
+.ice-delete:hover { background: #fee2e2; color: #dc2626; }
 
-.tag-cond { background: #fef3c7; color: #92400e; }
-.tag-effect { background: #ede9fe; color: #5b21b6; }
-
-.inspector-no-choices {
-    font-size: 0.8rem;
-    opacity: 0.7;
-    font-style: italic;
+.inspector-add-choice-btn {
     margin-top: 0.35rem;
+    width: 100%;
+    padding: 0.3rem;
+    font-size: 0.78rem;
+    border-radius: 6px;
+    border: 1px dashed #94a3b8;
+    background: transparent;
+    color: #64748b;
+    cursor: pointer;
+}
+.inspector-add-choice-btn:hover { background: rgba(148,163,184,0.12); color: #334155; }
+
+/* Inline ID error */
+.inspector-id-error {
+    display: block;
+    font-size: 0.72rem;
+    color: #dc2626;
+    margin-top: 0.15rem;
 }
 
 /* Diagnostics panel enhancements */
@@ -554,10 +606,11 @@
     .badge-error { background: #4b1d1d; color: #fecaca; }
     .badge-info { background: #1e3a5f; color: #bfdbfe; }
     .inspector-meta-pill { background: rgba(148,163,184,0.12); color: #e2e8f0; }
-    .inspector-choice-row { background: rgba(255,255,255,0.05); }
-    .inspector-target-link { color: #60a5fa; }
-    .tag-cond { background: #4a3412; color: #fde68a; }
-    .tag-effect { background: #2e1d4e; color: #c4b5fd; }
+    .inspector-choice-editor { background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.08); }
+    .ice-text, .ice-target { background: #2c2c2c; border-color: #555; color: #eee; }
+    .ice-cond, .ice-effect { background: #242424; border-color: #444; color: #ddd; }
+    .inspector-add-choice-btn { border-color: #555; color: #94a3b8; }
+    .inspector-add-choice-btn:hover { background: rgba(255,255,255,0.06); color: #e2e8f0; }
     .diag-count-error { background: #4b1d1d; color: #fecaca; }
     .diag-count-warning { background: #4a3412; color: #fde68a; }
     .diag-count-info { background: #1e3a5f; color: #bfdbfe; }
