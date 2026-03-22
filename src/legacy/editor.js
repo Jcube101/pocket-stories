@@ -62,6 +62,7 @@ let showSecondaryEdges = true;
 let inspectorEls = null;
 let editorUiState = { collapsedById: {}, focusCriticalPath: false, canvasViewMode: 'author' };
 let diagnosticsState = { issues: [], analyzers: {}, byNode: {} };
+let _autoDiagnosticsTimer = null;
 let hoveredNodeId = null;
 let _preservedSelectedId = null;
 let downstreamHighlight = { nodes: new Set(), edges: new Set() };
@@ -614,15 +615,50 @@ function escapeHtml(text) {
 
 function renderInspectorMeta(nodeId, passage) {
     if (!inspectorEls?.meta) return;
-    const choiceCount = (passage.choices || []).length;
-    const conditionalCount = (passage.choices || []).filter(choice => Boolean(choice.condition)).length;
-    const missingTargets = (passage.choices || []).filter(choice => !window.storyData.passages[choice.target]).map(choice => choice.target);
+    const choices = passage.choices || [];
+    const missingTargets = choices.filter(ch => !window.storyData.passages[ch.target]).map(ch => ch.target);
+    const isUnreachable = highlightedUnreachableNodes.has(nodeId);
+    const textLen = (passage.text || '').trim().length;
+
+    const statusBadge = isUnreachable
+        ? '<span class="inspector-badge badge-warning">⚠ Unreachable</span>'
+        : missingTargets.length
+            ? `<span class="inspector-badge badge-error">✖ Dangling ref</span>`
+            : choices.length === 0 && nodeId !== 'start'
+                ? '<span class="inspector-badge badge-info">⊙ Ending node</span>'
+                : '<span class="inspector-badge badge-ok">✓ OK</span>';
+
+    const choiceRows = choices.map((ch, idx) => {
+        const targetExists = Boolean(window.storyData.passages[ch.target]);
+        const targetLabel = ch.target
+            ? (targetExists ? `<a class="inspector-target-link" data-target="${escapeHtml(ch.target)}">${escapeHtml(ch.target)} →</a>` : `<span class="inspector-target-missing">${escapeHtml(ch.target || '?')} ✖</span>`)
+            : '<span class="inspector-target-missing">? missing</span>';
+        const condTag = ch.condition ? `<span class="inspector-tag tag-cond" title="${escapeHtml(ch.condition)}">if: ${escapeHtml(ch.condition.length > 28 ? ch.condition.slice(0, 28) + '…' : ch.condition)}</span>` : '';
+        const effectTag = ch.effect ? `<span class="inspector-tag tag-effect" title="${escapeHtml(ch.effect)}">fx: ${escapeHtml(ch.effect.length > 28 ? ch.effect.slice(0, 28) + '…' : ch.effect)}</span>` : '';
+        return `<div class="inspector-choice-row">
+            <span class="inspector-choice-num">${idx + 1}.</span>
+            <span class="inspector-choice-text">${escapeHtml((ch.text || '').trim() || '(no text)')}</span>
+            <span class="inspector-choice-target">${targetLabel}</span>
+            ${condTag}${effectTag}
+        </div>`;
+    }).join('');
+
     inspectorEls.meta.innerHTML = `
-        <div class="inspector-meta-row"><strong>Choices:</strong> ${choiceCount}</div>
-        <div class="inspector-meta-row"><strong>Conditional choices:</strong> ${conditionalCount}</div>
-        <div class="inspector-meta-row"><strong>Missing targets:</strong> ${missingTargets.length ? missingTargets.join(', ') : 'None'}</div>
-        <div class="inspector-meta-row"><strong>Unreachable:</strong> ${highlightedUnreachableNodes.has(nodeId) ? 'Yes' : 'No'}</div>
+        <div class="inspector-meta-stats">
+            ${statusBadge}
+            <span class="inspector-meta-pill">${choices.length} choice${choices.length !== 1 ? 's' : ''}</span>
+            <span class="inspector-meta-pill">${textLen} chars</span>
+        </div>
+        ${choices.length > 0 ? `<div class="inspector-choices-list">${choiceRows}</div>` : '<div class="inspector-no-choices">No choices — terminal passage.</div>'}
     `;
+
+    // Wire jump-to-node links
+    inspectorEls.meta.querySelectorAll('.inspector-target-link').forEach(link => {
+        link.addEventListener('click', () => {
+            const target = link.dataset.target;
+            if (target) focusNode(target);
+        });
+    });
 }
 
 function refreshNodeCard(nodeId, graphModel = null) {
@@ -832,6 +868,15 @@ function saveState(options = {}) {
     // Notify React of the mutation (skip on init to avoid re-render on every initEditor() call)
     if (!options.resetHistory && typeof window.onStoryChange === 'function') {
         window.onStoryChange(window.storyData);
+    }
+
+    // Auto-run diagnostics after mutations (debounced 1.2s, no modal)
+    if (!options.resetHistory && diagnosticsState.issues.length >= 0) {
+        if (_autoDiagnosticsTimer) clearTimeout(_autoDiagnosticsTimer);
+        _autoDiagnosticsTimer = setTimeout(() => {
+            _autoDiagnosticsTimer = null;
+            validateStory({ showModalReport: false });
+        }, 1200);
     }
 }
 
@@ -2538,12 +2583,18 @@ function renderDiagnosticsPanel() {
     const errorCount = issues.filter(issue => issue.severity === 'error').length;
     const warningCount = issues.filter(issue => issue.severity === 'warning').length;
     const infoCount = issues.filter(issue => issue.severity === 'info').length;
-    summary.textContent = `Errors: ${errorCount} • Warnings: ${warningCount} • Info: ${infoCount}`;
 
     if (issues.length === 0) {
-        panel.innerHTML = '<div class="diagnostics-empty">No diagnostics yet.</div>';
+        summary.innerHTML = '<span style="color:#10b981;font-weight:600;">✓ No issues found</span>';
+        panel.innerHTML = '<div class="diagnostics-empty">Story looks good! Run Validate anytime after editing.</div>';
         return;
     }
+
+    const summaryParts = [];
+    if (errorCount) summaryParts.push(`<span class="diag-count diag-count-error">✖ ${errorCount} error${errorCount !== 1 ? 's' : ''}</span>`);
+    if (warningCount) summaryParts.push(`<span class="diag-count diag-count-warning">⚠ ${warningCount} warning${warningCount !== 1 ? 's' : ''}</span>`);
+    if (infoCount) summaryParts.push(`<span class="diag-count diag-count-info">ℹ ${infoCount} hint${infoCount !== 1 ? 's' : ''}</span>`);
+    summary.innerHTML = summaryParts.join(' &nbsp;');
 
     panel.innerHTML = '';
 
@@ -2567,13 +2618,16 @@ function renderDiagnosticsPanel() {
         panel.appendChild(safeRow);
     }
 
+    const SEVERITY_ICONS = { error: '✖', warning: '⚠', info: 'ℹ' };
+
     issues.forEach((issue, idx) => {
         const row = document.createElement('div');
         row.className = `diagnostic-row severity-${issue.severity}`;
 
         const label = document.createElement('div');
         label.className = 'diagnostic-message';
-        label.textContent = `${idx + 1}. ${issue.message}`;
+        const icon = SEVERITY_ICONS[issue.severity] || '•';
+        label.innerHTML = `<span class="diag-icon diag-icon-${issue.severity}">${icon}</span> ${escapeHtml(issue.message)}`;
         row.appendChild(label);
 
         const actions = document.createElement('div');
@@ -2713,6 +2767,70 @@ function validateStory(options = {}) {
                 }
             }
         });
+    }
+
+    // ── Extended checks ──────────────────────────────────────
+    // Missing story title
+    if (!window.storyData.title || String(window.storyData.title).trim() === '') {
+        addIssue('warning', 'Story is missing a title (top-level "title:" field)');
+    }
+
+    for (const id of ids) {
+        const p = passages[id];
+        const text = (p.text || '').trim();
+
+        // Empty passage text
+        if (text === '') {
+            addIssue('warning', `Empty text in passage "${id}"`, { nodeId: id });
+        }
+
+        // Very long passage text (> 800 chars — may affect readability)
+        if (text.length > 800) {
+            addIssue('info', `Long passage text in "${id}": ${text.length} chars (consider splitting)`, { nodeId: id });
+        }
+
+        const choices = p.choices || [];
+
+        // Self-referencing choice
+        choices.forEach((ch, idx) => {
+            if (ch.target === id) {
+                addIssue('warning', `Self-loop in "${id}" choice #${idx + 1}: choice targets its own passage`, { from: id, target: ch.target, index: idx });
+            }
+        });
+
+        // Duplicate choice text within the same passage
+        const seenTexts = new Map();
+        choices.forEach((ch, idx) => {
+            const t = (ch.text || '').trim().toLowerCase();
+            if (!t) return;
+            if (seenTexts.has(t)) {
+                addIssue('warning', `Duplicate choice text in "${id}" choices #${seenTexts.get(t) + 1} and #${idx + 1}: "${ch.text}"`, { from: id, target: ch.target, index: idx });
+            } else {
+                seenTexts.set(t, idx);
+            }
+        });
+    }
+
+    // Variable reference validation: conditions that reference undeclared variable groups
+    const declaredPaths = new Set();
+    const vars = window.storyData.variables || {};
+    ['inventory', 'relationships', 'flags'].forEach(group => {
+        if (vars[group]) Object.keys(vars[group]).forEach(k => declaredPaths.add(`${group}.${k}`));
+    });
+    if (declaredPaths.size > 0) {
+        for (const id of ids) {
+            const p = passages[id];
+            (p.choices || []).forEach((ch, idx) => {
+                if (!ch.condition || typeof storyParsers.parseCondition !== 'function') return;
+                // Extract dotted identifiers from condition string
+                const refs = (ch.condition.match(/[a-z_][a-z0-9_]*\.[a-z_][a-z0-9_]*/gi) || []);
+                refs.forEach(ref => {
+                    if (!declaredPaths.has(ref)) {
+                        addIssue('warning', `Undeclared variable "${ref}" in "${id}" choice #${idx + 1} condition`, { from: id, target: ch.target, index: idx });
+                    }
+                });
+            });
+        }
     }
 
     const analyzer = runGraphAnalyzers(passages);
