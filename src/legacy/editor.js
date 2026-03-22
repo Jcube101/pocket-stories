@@ -38,7 +38,7 @@ let connectingFrom = null;
 let selectedNode = null;
 let undoStack = [];
 let historyIndex = -1;
-const MAX_HISTORY = 20;
+const MAX_HISTORY = 100;
 let highlightedCycleNodes = new Set();
 let highlightedCycleEdges = new Set();
 let highlightedUnreachableNodes = new Set();
@@ -616,48 +616,125 @@ function escapeHtml(text) {
 function renderInspectorMeta(nodeId, passage) {
     if (!inspectorEls?.meta) return;
     const choices = passage.choices || [];
-    const missingTargets = choices.filter(ch => !window.storyData.passages[ch.target]).map(ch => ch.target);
     const isUnreachable = highlightedUnreachableNodes.has(nodeId);
+    const missingTargets = choices.filter(ch => !window.storyData.passages[ch.target]).map(ch => ch.target);
     const textLen = (passage.text || '').trim().length;
 
     const statusBadge = isUnreachable
         ? '<span class="inspector-badge badge-warning">⚠ Unreachable</span>'
         : missingTargets.length
-            ? `<span class="inspector-badge badge-error">✖ Dangling ref</span>`
+            ? '<span class="inspector-badge badge-error">✖ Dangling ref</span>'
             : choices.length === 0 && nodeId !== 'start'
                 ? '<span class="inspector-badge badge-info">⊙ Ending node</span>'
                 : '<span class="inspector-badge badge-ok">✓ OK</span>';
 
-    const choiceRows = choices.map((ch, idx) => {
-        const targetExists = Boolean(window.storyData.passages[ch.target]);
-        const targetLabel = ch.target
-            ? (targetExists ? `<a class="inspector-target-link" data-target="${escapeHtml(ch.target)}">${escapeHtml(ch.target)} →</a>` : `<span class="inspector-target-missing">${escapeHtml(ch.target || '?')} ✖</span>`)
-            : '<span class="inspector-target-missing">? missing</span>';
-        const condTag = ch.condition ? `<span class="inspector-tag tag-cond" title="${escapeHtml(ch.condition)}">if: ${escapeHtml(ch.condition.length > 28 ? ch.condition.slice(0, 28) + '…' : ch.condition)}</span>` : '';
-        const effectTag = ch.effect ? `<span class="inspector-tag tag-effect" title="${escapeHtml(ch.effect)}">fx: ${escapeHtml(ch.effect.length > 28 ? ch.effect.slice(0, 28) + '…' : ch.effect)}</span>` : '';
-        return `<div class="inspector-choice-row">
-            <span class="inspector-choice-num">${idx + 1}.</span>
-            <span class="inspector-choice-text">${escapeHtml((ch.text || '').trim() || '(no text)')}</span>
-            <span class="inspector-choice-target">${targetLabel}</span>
-            ${condTag}${effectTag}
-        </div>`;
-    }).join('');
-
+    // Build scaffold — user content set via .value below (no innerHTML injection)
     inspectorEls.meta.innerHTML = `
         <div class="inspector-meta-stats">
             ${statusBadge}
-            <span class="inspector-meta-pill">${choices.length} choice${choices.length !== 1 ? 's' : ''}</span>
+            <span class="inspector-meta-pill ice-choice-count">${choices.length} choice${choices.length !== 1 ? 's' : ''}</span>
             <span class="inspector-meta-pill">${textLen} chars</span>
         </div>
-        ${choices.length > 0 ? `<div class="inspector-choices-list">${choiceRows}</div>` : '<div class="inspector-no-choices">No choices — terminal passage.</div>'}
+        <datalist id="inspector-passage-ids"></datalist>
+        <div class="inspector-choices-editor"></div>
+        <button type="button" class="inspector-add-choice-btn">+ Add Choice</button>
     `;
 
-    // Wire jump-to-node links
-    inspectorEls.meta.querySelectorAll('.inspector-target-link').forEach(link => {
-        link.addEventListener('click', () => {
-            const target = link.dataset.target;
-            if (target) focusNode(target);
+    // Populate datalist
+    const datalist = inspectorEls.meta.querySelector('#inspector-passage-ids');
+    Object.keys(window.storyData.passages).forEach(id => {
+        const opt = document.createElement('option');
+        opt.value = id;
+        datalist.appendChild(opt);
+    });
+
+    const editorEl = inspectorEls.meta.querySelector('.inspector-choices-editor');
+
+    // Build a single editable choice row
+    function buildRow(ch, idx) {
+        const row = document.createElement('div');
+        row.className = 'inspector-choice-editor';
+        row.dataset.idx = String(idx);
+        row.innerHTML = `
+            <div class="ice-row-main">
+                <span class="ice-num">${idx + 1}.</span>
+                <input class="ice-text" type="text" placeholder="Choice text…" />
+                <input class="ice-target" type="text" list="inspector-passage-ids" placeholder="target id" />
+                <button type="button" class="ice-delete" title="Delete this choice">✕</button>
+            </div>
+            <div class="ice-row-meta">
+                <input class="ice-cond" type="text" placeholder="condition (optional)" />
+                <input class="ice-effect" type="text" placeholder="effect (optional)" />
+            </div>
+        `;
+        // Set values safely via .value (avoids HTML-encoding concerns)
+        row.querySelector('.ice-text').value = ch.text || '';
+        row.querySelector('.ice-target').value = ch.target || '';
+        row.querySelector('.ice-cond').value = ch.condition || '';
+        row.querySelector('.ice-effect').value = ch.effect || '';
+        return row;
+    }
+
+    choices.forEach((ch, idx) => editorEl.appendChild(buildRow(ch, idx)));
+
+    // Read all rows back into an array of choice objects
+    function collectChoices() {
+        return Array.from(editorEl.querySelectorAll('.inspector-choice-editor')).map(row => {
+            const ch = {
+                text: row.querySelector('.ice-text').value.trim(),
+                target: row.querySelector('.ice-target').value.trim()
+            };
+            const cond = row.querySelector('.ice-cond').value.trim();
+            const fx = row.querySelector('.ice-effect').value.trim();
+            if (cond) ch.condition = cond;
+            if (fx) ch.effect = fx;
+            return ch;
+        // Skip rows where both text and target are empty
+        }).filter(ch => ch.text !== '' || ch.target !== '');
+    }
+
+    // Commit collected choices to storyData and refresh canvas
+    function commitChoices(andSaveState = true) {
+        const p = window.storyData.passages[nodeId];
+        if (!p) return;
+        p.choices = collectChoices();
+        refreshNodeCard(nodeId);
+        renderPassageList();
+        drawConnections();
+        // Update count pill without rebuilding the whole editor
+        const pill = inspectorEls.meta.querySelector('.ice-choice-count');
+        if (pill) {
+            const n = p.choices.length;
+            pill.textContent = `${n} choice${n !== 1 ? 's' : ''}`;
+        }
+        if (andSaveState) saveState();
+    }
+
+    // Save on blur of any choice input field (capture phase to catch all children)
+    editorEl.addEventListener('blur', e => {
+        if (e.target.matches('.ice-text, .ice-target, .ice-cond, .ice-effect')) {
+            commitChoices(true);
+        }
+    }, true);
+
+    // Delete a choice row
+    editorEl.addEventListener('click', e => {
+        if (!e.target.classList.contains('ice-delete')) return;
+        e.target.closest('.inspector-choice-editor').remove();
+        // Renumber remaining rows
+        editorEl.querySelectorAll('.inspector-choice-editor').forEach((row, i) => {
+            row.dataset.idx = String(i);
+            row.querySelector('.ice-num').textContent = `${i + 1}.`;
         });
+        commitChoices(true);
+    });
+
+    // Add a new choice row
+    inspectorEls.meta.querySelector('.inspector-add-choice-btn').addEventListener('click', () => {
+        const idx = editorEl.querySelectorAll('.inspector-choice-editor').length;
+        const row = buildRow({ text: '', target: '' }, idx);
+        editorEl.appendChild(row);
+        row.querySelector('.ice-text').focus();
     });
 }
 
@@ -946,15 +1023,35 @@ function initEditor() {
     };
 
     if (inspectorEls.id) {
-        inspectorEls.id.onblur = () => {
+        function showIdError(msg) {
+            let err = inspectorEls.id.parentNode.querySelector('.inspector-id-error');
+            if (!err) {
+                err = document.createElement('small');
+                err.className = 'inspector-id-error';
+                inspectorEls.id.after(err);
+            }
+            err.textContent = msg;
+        }
+        function clearIdError() {
+            const err = inspectorEls.id.parentNode?.querySelector('.inspector-id-error');
+            if (err) err.remove();
+        }
+
+        function applyIdRename() {
             const originalId = inspectorEls.id.dataset.originalId;
             const nextId = inspectorEls.id.value.trim();
-            if (!originalId || !nextId || nextId === originalId) return;
-            if (window.storyData.passages[nextId]) {
-                alert(`Passage "${nextId}" already exists.`);
+            if (!originalId || !nextId || nextId === originalId) { clearIdError(); return; }
+            if (!/^[a-zA-Z0-9_-]+$/.test(nextId)) {
+                showIdError('ID must contain only letters, digits, _ or -');
                 inspectorEls.id.value = originalId;
                 return;
             }
+            if (window.storyData.passages[nextId]) {
+                showIdError(`"${nextId}" already exists.`);
+                inspectorEls.id.value = originalId;
+                return;
+            }
+            clearIdError();
 
             window.storyData.passages[nextId] = JSON.parse(JSON.stringify(window.storyData.passages[originalId]));
             delete window.storyData.passages[originalId];
@@ -981,7 +1078,18 @@ function initEditor() {
             drawConnections();
             updateNodeInspector(nextId);
             saveState();
+        }
+
+        inspectorEls.id.onblur = applyIdRename;
+        inspectorEls.id.onkeydown = e => {
+            if (e.key === 'Enter') { e.preventDefault(); inspectorEls.id.blur(); }
+            if (e.key === 'Escape') {
+                inspectorEls.id.value = inspectorEls.id.dataset.originalId || '';
+                clearIdError();
+                inspectorEls.id.blur();
+            }
         };
+        inspectorEls.id.oninput = () => clearIdError();
     }
 
     if (inspectorEls.text) {
