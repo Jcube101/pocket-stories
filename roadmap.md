@@ -1,6 +1,6 @@
 # Pocket Stories — Development Roadmap
 
-Last updated: 2026-03-19. All three phases complete. See `known-issues.md` for the full bug list and `decisions.md` for the architectural choices that shape this plan.
+Last updated: 2026-03-22. Phases 1–5 complete. See `known-issues.md` for the full bug list and `decisions.md` for the architectural choices that shape this plan.
 
 ---
 
@@ -134,6 +134,80 @@ All Phase 3 items implemented (branch `claude/create-claude-md-ZAKIr`, 2026-03-1
 ### P3-7 Fix `tsconfig.json` `moduleResolution` casing — *DONE*
 
 - `"Bundler"` → `"bundler"`
+
+---
+
+## Phase 4 — UI Overhaul ✅ COMPLETE
+
+Implemented 2026-03-22 (branch `claude/create-claude-md-ZAKIr`).
+
+### P4-1 Restructure app header — *DONE*
+
+- Editor/Player mode tabs moved to left side of header
+- Story selector (compact `<select>` + Load button) placed in header right alongside theme toggle
+- Stories container removed from main content area entirely — collapsed into the header dropdown
+
+### P4-2 Reorder sidebar sections — *DONE*
+
+- New order from top to bottom: Variables → Passages → Tools → Diagnostics → Canvas Controls → Split View → Stories
+- Stories section demoted to bottom of sidebar (now also accessible via header dropdown)
+
+### P4-3 Variables panel improvements — *DONE*
+
+- "Remove" button text replaced with `−` (minus symbol), 32×32px icon button
+- Variable names rendered with full legibility (ellipsis overflow, tooltip on hover)
+
+### P4-4 Tools 2×2 grid layout — *DONE*
+
+- Tool buttons laid out in a 2-column grid — reduces vertical space consumption
+
+### P4-5 Canvas Controls and Split View sections — *DONE*
+
+- Canvas Controls: all canvas actions as visible buttons; zoom percentage displayed inline
+- View Mode: Author / Logic / Playtest toggle buttons (replace hidden radio inputs)
+- Split View: new section with Show Jump/Return, Critical Path, Full Downstream toggle buttons
+- Fixed "Runtime parser unavailable" — `window.storyParsers` bridge set in `App.tsx` (U3)
+
+### P4-6 Canvas interaction improvements — *DONE*
+
+- Left-click drag on canvas background (nodesContainer) now pans the canvas
+- Scroll-to-zoom moved to `canvas-wrapper` (covers all canvas areas)
+- Touch support: one-finger pan, two-finger pinch-zoom
+
+### P4-7 Node click → inspector bug fixed — *DONE*
+
+- After drag → `saveState()` → React re-render → `initEditor()`, selected node was reset to nothing
+- Fixed via `_preservedSelectedId` module-level variable: stored in `selectNodeByElement()`, restored at end of `initEditor()`
+
+### P4-8 Diagnostics panel expanded — *DONE*
+
+- Max-height increased from 34vh to 55vh
+- More vertical space for viewing multiple issues
+
+---
+
+## Phase 5 — Inspector and Diagnostics Power-Up ✅ COMPLETE
+
+Implemented 2026-03-22 (branch `claude/create-claude-md-ZAKIr`).
+
+### P5-1 Fix node inspector overlap and enhance inspector — *DONE*
+
+- Root cause: `#canvas-wrapper { position: absolute; top: 0; left: 0; width: 100%; height: 100% }` completely obscured `#node-inspector` (U4)
+- Fix: changed to `position: relative; overflow: hidden`; flex layout in `player.css` takes over correctly
+- Enhanced `renderInspectorMeta()`: full per-choice list with text, target (clickable jump link), condition tag, effect tag
+- Status badges: ✓ OK / ⚠ Unreachable / ✖ Dangling ref / ⊙ Ending node + char count pill (U5)
+
+### P5-2 Diagnostics power-up — *DONE*
+
+- 6 new checks: missing story title, empty passage text, long passages (>800 chars), self-loop choices, duplicate choice text, undeclared variable references in conditions
+- Auto-run diagnostics (debounced 1.2s) after every `saveState()` mutation — no modal (U6)
+- Richer panel: severity icons (✖/⚠/ℹ), colored count pills, green "✓ No issues found" when clean
+
+### P5-3 Replace `space_outpost.yaml` with `hearts_and_ashes.yaml` — *DONE*
+
+- Replaced the 8-passage sci-fi demo with a ~35-passage love triangle narrative
+- Features: multiple loops, multiple endings, `relationships` numeric tracking, `flags` state, conditional paths
+- Resolves Y3 (redundant condition in old `space_outpost.yaml`)
 
 ---
 
