@@ -257,6 +257,44 @@ Implemented 2026-03-22 (branch `claude/inspector-choice-editor-ZAKIr`).
 
 ---
 
+## Phase 8A — Player: Full-screen Immersive Mobile ✅ COMPLETE
+
+Implemented 2026-03-24 (branch `claude/inspector-choice-editor-ZAKIr`).
+
+### P8A-1 Full-screen immersive player layout — *DONE*
+
+- `index.html`: `viewport-fit=cover` added for notch/rounded-corner safe-area support
+- `player-layout` becomes a `flex` column at `max-width: 767px`, filling available height via `app-shell { height: 100dvh }` + `main-content:has(.player-layout) { flex: 1 }`
+- `#passage-container` takes `flex: 1; overflow-y: auto` — passage content scrolls; the shell does not
+
+### P8A-2 Mobile top bar & bottom bar — *DONE*
+
+- **Top bar** (48px): ↺ Restart button + story title — hidden on desktop, visible on mobile
+- **Bottom bar** (44px + safe-area): History toggle button showing count — hidden on desktop, visible on mobile
+- Desktop history `<aside>` gains `.player-history-aside` class and is `display: none` on mobile
+
+### P8A-3 History as a slide-up bottom drawer — *DONE*
+
+- `.player-history-drawer`: `position: fixed; bottom: 0; border-radius: 16px 16px 0 0; transform: translateY(100%)` — slides to `translateY(0)` when `.open`
+- `.player-history-backdrop`: `position: fixed; inset: 0` — tap to close drawer
+- Drawer resets to closed on story change, restart, and when a choice is made
+- Respects `env(safe-area-inset-bottom)` for notched devices
+
+### P8A-4 Tap-to-skip typewriter — *DONE*
+
+- `skipRevealRef` (useRef) set to `true` when passage text is tapped during reveal
+- rAF tick checks `skipRevealRef.current` at start of each frame — jumps to full text immediately
+- `cursor: pointer` on passage text while typewriter is active; `undefined` when complete
+- History drawer closed when a choice is made
+
+### P8A-5 Touch interaction improvements — *DONE*
+
+- `touch-action: manipulation` on all `button`, `a`, `[role="button"]` — eliminates 300ms tap delay
+- Choice buttons: `min-height: 52px` on mobile (Apple HIG recommends ≥ 44px)
+- `player-top-restart` and `player-history-toggle` both have `:active` states with `var(--player-accent-soft)`
+
+---
+
 ## Architectural Decisions
 
 See `decisions.md` for the five decisions that must be made before Phase 2 begins:

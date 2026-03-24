@@ -55,3 +55,8 @@ h1 {
 .hidden {
     display: none !important;
 }
+
+/* Eliminate 300ms tap delay on all interactive elements */
+button, a, [role="button"] {
+    touch-action: manipulation;
+}
