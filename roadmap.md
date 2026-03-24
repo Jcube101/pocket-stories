@@ -1,6 +1,6 @@
 # Pocket Stories — Development Roadmap
 
-Last updated: 2026-03-22. Phases 1–5 complete. See `known-issues.md` for the full bug list and `decisions.md` for the architectural choices that shape this plan.
+Last updated: 2026-03-24. Phases 1–8 complete. See `known-issues.md` for the full bug list and `decisions.md` for the architectural choices that shape this plan.
 
 ---
 
@@ -292,6 +292,39 @@ Implemented 2026-03-24 (branch `claude/inspector-choice-editor-ZAKIr`).
 - `touch-action: manipulation` on all `button`, `a`, `[role="button"]` — eliminates 300ms tap delay
 - Choice buttons: `min-height: 52px` on mobile (Apple HIG recommends ≥ 44px)
 - `player-top-restart` and `player-history-toggle` both have `:active` states with `var(--player-accent-soft)`
+
+---
+
+## Phase 8B — Editor: Mobile Passage-List View ✅ COMPLETE
+
+Implemented 2026-03-24 (branch `claude/inspector-choice-editor-ZAKIr`).
+
+### P8B-1 `MobileEditorView` component — *DONE*
+
+- New `src/components/MobileEditorView.tsx` — a fully self-contained mobile editor, no dependency on `editor.js`
+- **Screen 1 — Passage list**: sorted passage cards (`start` first, then alphabetical), each showing ID, 120-char excerpt, choice count, and status badge (✓ OK / ⊙ Ending / ✖ Dangling ref)
+- **Screen 2 — Passage editor**: full-screen detail view with ID rename input, passage textarea, live choice editor (reuses `ice-*` CSS classes from the desktop inspector), and delete zone
+- Local state (`localText`, `localChoices`, `localId`) is initialized from the story prop on passage open and committed on blur — no stale-closure issues
+
+### P8B-2 `useIsMobile` hook + `StoryEditor` gating — *DONE*
+
+- `useIsMobile()` hook added to `StoryEditor.tsx` using `window.matchMedia('(max-width: 767px)')` with `addEventListener('change')` for reactive resize
+- `initEditor` effect gated by `if (isMobile) return` — canvas is never initialized on phones; `destroyEditor()` runs if viewport is resized back to desktop from an already-initialized state
+- Mobile path returns `<MobileEditorView>` directly; desktop JSX unchanged
+
+### P8B-3 Key editing behaviors — *DONE*
+
+- **Passage text and choices**: committed to story state on every blur via `onStoryChange(structuredClone(...))`
+- **ID rename**: validates `[a-zA-Z0-9_-]+`, checks for collisions, renames the passage key, and updates all `target:` references across every passage — same logic as the desktop inspector
+- **Add passage**: generates `passage_N` (skipping existing), adds to story, opens editor immediately
+- **Delete passage**: `window.confirm()` guard; removes passage and blanks out any `target:` fields pointing to it so they surface as dangling refs
+- **Play button**: calls `window.setAppMode?.('player')` via the existing window bridge — no new prop needed
+
+### P8B-4 `mobile-editor.css` + global import — *DONE*
+
+- New `src/styles/mobile-editor.css` with all `.mev-*` classes: shell, top bar, passage list, passage cards, detail header/body, buttons, dark mode overrides via `@media (prefers-color-scheme: dark)` and `html[data-theme="dark"]`
+- `@media (max-width: 767px) .main-content:has(.mev-shell)` rule strips padding and gives the shell full height — same `:has()` pattern as the player
+- `global.css`: `@import './mobile-editor.css'` added after the other three imports
 
 ---
 
