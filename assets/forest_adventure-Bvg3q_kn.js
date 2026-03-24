@@ -1,4 +1,4 @@
-const e=`# story.yaml
+const e=`title: "Forest Adventure"
 variables:
   inventory:
     key: false
@@ -82,7 +82,7 @@ passages:
     choices:
       - text: "Thank her and accept"
         target: clearing_look
-        effect: "inventory.potion += 1"
+        effect: "inventory.potion = 1"
       - text: "Decline politely"
         target: clearing_look
 

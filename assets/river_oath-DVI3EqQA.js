@@ -1,4 +1,5 @@
-const e=`variables:
+const e=`title: "River Oath"
+variables:
   inventory:
     silver_ring: false
     lantern: false

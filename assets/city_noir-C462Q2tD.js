@@ -1,4 +1,5 @@
-const e=`variables:
+const e=`title: "City Noir"
+variables:
   inventory:
     badge: false
     evidence: false

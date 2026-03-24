@@ -1,4 +1,5 @@
-const e=`variables:
+const e=`title: "Space Outpost"
+variables:
   inventory:
     toolkit: false
     fuel_cell: false
