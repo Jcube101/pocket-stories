@@ -44,13 +44,17 @@ export function PlayerView({ storyData, loading, error }: PlayerViewProps) {
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [outgoingSnapshot, setOutgoingSnapshot] = useState<OutgoingSnapshot | null>(null);
   const [effectErrors, setEffectErrors] = useState<string[]>([]);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const transitionTimeoutRef = useRef<number | null>(null);
+  // Set to true by tap-to-skip; the rAF tick checks this and fast-forwards reveal
+  const skipRevealRef = useRef(false);
 
   const prefersReducedMotion = useMemo(
     () => typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches,
     []
   );
 
+  // Reset all state when the story changes
   useEffect(() => {
     if (!storyData) return;
     const startPassage = storyData.passages.start ? 'start' : Object.keys(storyData.passages)[0] ?? 'start';
@@ -61,6 +65,7 @@ export function PlayerView({ storyData, loading, error }: PlayerViewProps) {
     setIsTransitioning(false);
     setOutgoingSnapshot(null);
     setEffectErrors([]);
+    setHistoryOpen(false);
     if (transitionTimeoutRef.current) {
       window.clearTimeout(transitionTimeoutRef.current);
       transitionTimeoutRef.current = null;
@@ -78,16 +83,19 @@ export function PlayerView({ storyData, loading, error }: PlayerViewProps) {
 
   const passage = storyData?.passages[displayPassage] ?? null;
 
-  const evaluateCondition = (condition: string) =>
-    evalCondition(condition, variablesState);
+  const evaluateCondition = (condition: string) => evalCondition(condition, variablesState);
 
-  const visibleChoices = passage ? (passage.choices ?? []).filter((choice) => !choice.condition || evaluateCondition(choice.condition)) : [];
+  const visibleChoices = passage
+    ? (passage.choices ?? []).filter((choice) => !choice.condition || evaluateCondition(choice.condition))
+    : [];
 
+  // Typewriter effect — skipRevealRef.current allows tap-to-skip fast-forward
   useEffect(() => {
     if (!passage) return;
     const text = passage.text.trim();
     setVisibleChoiceCount(0);
     setIsPassageRevealComplete(false);
+    skipRevealRef.current = false;
 
     if (!text || prefersReducedMotion) {
       setRenderedText(text);
@@ -100,6 +108,12 @@ export function PlayerView({ storyData, loading, error }: PlayerViewProps) {
     let revealedCharacters = 0;
 
     const tick = (now: number) => {
+      // Tap-to-skip: jump straight to full text
+      if (skipRevealRef.current) {
+        setRenderedText(text);
+        setIsPassageRevealComplete(true);
+        return;
+      }
       if (!previous) previous = now;
       const deltaMs = now - previous;
       previous = now;
@@ -120,6 +134,7 @@ export function PlayerView({ storyData, loading, error }: PlayerViewProps) {
     return () => window.cancelAnimationFrame(rafId);
   }, [displayPassage, passage, prefersReducedMotion]);
 
+  // Stagger choices in after text reveal is complete
   useEffect(() => {
     if (!isPassageRevealComplete) return;
 
@@ -164,6 +179,22 @@ export function PlayerView({ storyData, loading, error }: PlayerViewProps) {
     setVariablesState(nextState);
   };
 
+  function handleRestart() {
+    if (!storyData) return;
+    const startPassage = storyData.passages.start ? 'start' : Object.keys(storyData.passages)[0] ?? 'start';
+    setCurrentPassage(startPassage);
+    setDisplayPassage(startPassage);
+    setVariablesState(normalizeVariables(storyData.variables));
+    setHistory([]);
+    setOutgoingSnapshot(null);
+    setIsTransitioning(false);
+    setHistoryOpen(false);
+    if (transitionTimeoutRef.current) {
+      window.clearTimeout(transitionTimeoutRef.current);
+      transitionTimeoutRef.current = null;
+    }
+  }
+
   const renderChoiceButton = (choice: StoryChoice, index: number, outgoing = false) => {
     const visible = outgoing || index < visibleChoiceCount;
     return (
@@ -175,10 +206,14 @@ export function PlayerView({ storyData, loading, error }: PlayerViewProps) {
         disabled={outgoing || isTransitioning || !isPassageRevealComplete || !visible}
         onClick={() => {
           if (!passage || outgoing || isTransitioning || !isPassageRevealComplete) return;
+          setHistoryOpen(false);
           setOutgoingSnapshot({ text: passage.text.trim(), choices: visibleChoices });
           setIsTransitioning(true);
           if (choice.effect) applyEffect(choice.effect);
-          setHistory((prev: HistoryItem[]) => [...prev, { passage: currentPassage, choiceText: choice.text, target: choice.target }]);
+          setHistory((prev: HistoryItem[]) => [
+            ...prev,
+            { passage: currentPassage, choiceText: choice.text, target: choice.target },
+          ]);
           setCurrentPassage(choice.target);
           setDisplayPassage(choice.target);
           transitionTimeoutRef.current = window.setTimeout(() => {
@@ -200,11 +235,25 @@ export function PlayerView({ storyData, loading, error }: PlayerViewProps) {
 
   return (
     <section className="player-layout">
+
+      {/* ── Mobile-only top bar: restart button + story title ─────────────── */}
+      <div className="player-top-bar">
+        <button className="player-top-restart player-control" onClick={handleRestart}>
+          ↺ Restart
+        </button>
+        {storyData.title && (
+          <span className="player-top-title">{storyData.title}</span>
+        )}
+      </div>
+
+      {/* ── Desktop-only heading (CSS hides this on mobile) ───────────────── */}
       {storyData.title && (
         <h2 className="player-heading text-2xl font-semibold tracking-tight text-player-text mb-playerSm">
           {storyData.title}
         </h2>
       )}
+
+      {/* ── Effect error banner ────────────────────────────────────────────── */}
       {effectErrors.length > 0 && (
         <div className="story-status warning" role="alert">
           <strong>Effect errors (choices may not apply correctly):</strong>
@@ -216,6 +265,8 @@ export function PlayerView({ storyData, loading, error }: PlayerViewProps) {
           </button>
         </div>
       )}
+
+      {/* ── Main passage content ───────────────────────────────────────────── */}
       <div id="passage-container" className="card border-player-border bg-player-surface-elevated p-playerLg text-player-text">
         <div className="passage-stage" data-transitioning={isTransitioning}>
           {outgoingSnapshot && (
@@ -234,7 +285,14 @@ export function PlayerView({ storyData, loading, error }: PlayerViewProps) {
           )}
 
           <div className="passage-layer passage-layer-incoming">
-            <div id="passage-text" className="passage-text mb-playerMd rounded-xl border border-player-border bg-player-surface p-playerLg text-player-text" aria-live="polite">
+            {/* Tapping the passage text during typewriter reveal skips to full text */}
+            <div
+              id="passage-text"
+              className="passage-text mb-playerMd rounded-xl border border-player-border bg-player-surface p-playerLg text-player-text"
+              aria-live="polite"
+              onClick={() => { if (!isPassageRevealComplete) skipRevealRef.current = true; }}
+              style={{ cursor: isPassageRevealComplete ? undefined : 'pointer' }}
+            >
               {renderedText}
             </div>
             <div id="choices" className="choices-grid grid-cols-1 sm:grid-cols-2">
@@ -247,23 +305,13 @@ export function PlayerView({ storyData, loading, error }: PlayerViewProps) {
           </div>
         </div>
       </div>
-      <aside className="card border-player-border bg-player-surface-elevated p-playerLg text-player-text">
+
+      {/* ── Desktop history aside (CSS hides this on mobile) ──────────────── */}
+      <aside className="card player-history-aside border-player-border bg-player-surface-elevated p-playerLg text-player-text">
         <h3 className="player-heading mb-playerSm text-2xl font-semibold tracking-tight">History</h3>
         <button
           className="player-control mb-playerMd min-h-11 rounded-xl border border-player-border bg-player-surface-elevated px-playerMd py-playerSm text-player-text transition-colors hover:border-player-accent hover:bg-player-accent-soft"
-          onClick={() => {
-            const startPassage = storyData.passages.start ? 'start' : Object.keys(storyData.passages)[0] ?? 'start';
-            setCurrentPassage(startPassage);
-            setDisplayPassage(startPassage);
-            setVariablesState(normalizeVariables(storyData.variables));
-            setHistory([]);
-            setOutgoingSnapshot(null);
-            setIsTransitioning(false);
-            if (transitionTimeoutRef.current) {
-              window.clearTimeout(transitionTimeoutRef.current);
-              transitionTimeoutRef.current = null;
-            }
-          }}
+          onClick={handleRestart}
         >
           Restart
         </button>
@@ -275,6 +323,57 @@ export function PlayerView({ storyData, loading, error }: PlayerViewProps) {
           ))}
         </ol>
       </aside>
+
+      {/* ── Mobile bottom bar: history drawer toggle (CSS hides on desktop) ─ */}
+      <div className="player-bottom-bar">
+        <button
+          className="player-history-toggle"
+          onClick={() => setHistoryOpen(true)}
+          aria-expanded={historyOpen}
+          aria-controls="player-history-drawer"
+        >
+          📜 {history.length > 0 ? `History (${history.length})` : 'History'}
+        </button>
+      </div>
+
+      {/* ── Mobile history drawer backdrop ────────────────────────────────── */}
+      <div
+        className={`player-history-backdrop${historyOpen ? ' open' : ''}`}
+        onClick={() => setHistoryOpen(false)}
+        aria-hidden="true"
+      />
+
+      {/* ── Mobile history drawer ──────────────────────────────────────────── */}
+      <div
+        id="player-history-drawer"
+        className={`player-history-drawer${historyOpen ? ' open' : ''}`}
+        aria-hidden={!historyOpen}
+        role="dialog"
+        aria-label="History"
+      >
+        <div className="player-drawer-header">
+          <h3 className="player-heading text-lg font-semibold tracking-tight text-player-text">History</h3>
+          <button
+            className="player-drawer-close"
+            onClick={() => setHistoryOpen(false)}
+            aria-label="Close history"
+          >
+            ✕
+          </button>
+        </div>
+        {history.length === 0 ? (
+          <p className="text-sm text-player-muted" style={{ fontStyle: 'italic' }}>No choices made yet.</p>
+        ) : (
+          <ol className="list-decimal space-y-playerSm pl-5 text-sm text-player-muted">
+            {history.map((item: HistoryItem, idx: number) => (
+              <li key={`${item.passage}-${idx}`}>
+                {item.choiceText} → {item.target}
+              </li>
+            ))}
+          </ol>
+        )}
+      </div>
+
     </section>
   );
 }
