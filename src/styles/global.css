@@ -1,6 +1,7 @@
 @import './base.css';
 @import './editor-graph.css';
 @import './player.css';
+@import './mobile-editor.css';
 
 @tailwind base;
 @tailwind components;

@@ -51,7 +51,8 @@ pocket-stories/
 │   ├── main.tsx                 # React entry point
 │   ├── components/
 │   │   ├── PlayerView.tsx       # Canonical interactive story player
-│   │   ├── StoryEditor.tsx      # Editor mode wrapper — dynamically loads legacy/editor.js
+│   │   ├── StoryEditor.tsx      # Editor mode wrapper — dynamically loads legacy/editor.js; renders MobileEditorView on phones
+│   │   ├── MobileEditorView.tsx # Mobile passage-list + passage-editor (phones < 768px only)
 │   │   └── StoryList.tsx        # Compact <select> + Load button (renders in app header)
 │   ├── legacy/
 │   │   └── editor.js            # Visual node-graph editor engine (~3,100 lines, plain JS)
@@ -64,7 +65,8 @@ pocket-stories/
 │       ├── global.css           # Tailwind directives + @imports + theme overrides
 │       ├── base.css             # Resets, body, base element styles
 │       ├── editor-graph.css     # Legacy editor: canvas, nodes, SVG
-│       └── player.css           # Player UI, CSS custom properties, animations + 2026 UI overrides
+│       ├── player.css           # Player UI, CSS custom properties, animations + 2026 UI overrides
+│       └── mobile-editor.css    # MobileEditorView styles (mev-* classes)
 ├── public/
 │   ├── 404.html                 # GitHub Pages SPA redirect (prevents 404 on deep links)
 │   └── stories/                 # Static copies of YAML files (served as assets)
@@ -114,7 +116,7 @@ The header is a flex row:
 
 ## Known Issues
 
-All Phase 1–8A items are complete. No open issues remain. CSS @import ordering bug (S2) introduced by P3-2 was hotfixed 2026-03-19. Node inspector overlap (U4) fixed 2026-03-22. Inspector click reliability (U7/U8) fixed 2026-03-22. Choice editor in inspector, ID rename UX polish, and undo limit raised to 100 (P7, 2026-03-22). Mobile player: full-screen immersive layout, history bottom drawer, tap-to-skip typewriter (P8A, 2026-03-24).
+All Phase 1–8B items are complete. No open issues remain. CSS @import ordering bug (S2) introduced by P3-2 was hotfixed 2026-03-19. Node inspector overlap (U4) fixed 2026-03-22. Inspector click reliability (U7/U8) fixed 2026-03-22. Choice editor in inspector, ID rename UX polish, and undo limit raised to 100 (P7, 2026-03-22). Mobile player: full-screen immersive layout, history bottom drawer, tap-to-skip typewriter (P8A, 2026-03-24). Mobile editor: passage-list mode on phones, MobileEditorView component, useIsMobile hook (P8B, 2026-03-24).
 
 Full history: `known-issues.md`
 

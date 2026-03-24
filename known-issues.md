@@ -1,6 +1,6 @@
 # Pocket Stories — Known Issues
 
-Bugs and gaps found during the initial codebase audit (2026-03-10). Updated 2026-03-19 after CSS @import hotfix. Updated 2026-03-22 after UI overhaul, inspector/diagnostics improvements, and choice editor + UX polish. Each item links to the relevant roadmap item in `roadmap.md`.
+Bugs and gaps found during the initial codebase audit (2026-03-10). Updated 2026-03-19 after CSS @import hotfix. Updated 2026-03-22 after UI overhaul, inspector/diagnostics improvements, and choice editor + UX polish. Updated 2026-03-24 after mobile polish (P8A player + P8B editor). Each item links to the relevant roadmap item in `roadmap.md`.
 
 **Status key:** ✅ Fixed | 🔴 Open
 
@@ -156,6 +156,18 @@ Node selection relied on the `click` event. Browsers suppress `click` if the poi
 ### U9 — No in-editor help or onboarding documentation ✅ Fixed (P6-3)
 New users had no guidance on how to create nodes, connect them, or use conditions and effects — there was no help text anywhere in the UI.
 **Fix:** Added a **Help & Guide** section at the top of the sidebar with a 10-item table of contents. A **"Read more →"** button opens a full help modal covering all editor features with examples and a keyboard shortcuts table.
+
+## Mobile polish (2026-03-24)
+
+Issues discovered and fixed during the Phase 8 mobile polish pass.
+
+### U10 — Player has no mobile-optimised layout ✅ Fixed (P8A)
+The player used a two-column grid (passage + history sidebar) that overflowed on 375px phones. No touch-optimised interactions, no tap-to-skip typewriter, history always visible even when empty.
+**Fix:** Full-screen immersive layout: passage fills viewport (`flex: 1; overflow-y: auto`), history replaced by a slide-up bottom drawer, mobile top bar (restart + title), bottom bar (history toggle), tap-to-skip typewriter via `skipRevealRef`, `touch-action: manipulation` on all interactive elements, `min-height: 52px` choice buttons. `viewport-fit=cover` added to meta viewport.
+
+### U11 — Editor unusable on phones ✅ Fixed (P8B)
+The canvas editor (360px fixed sidebar + SVG graph + inspector) overflowed phone screens. No passage-list fallback.
+**Fix:** `useIsMobile` hook in `StoryEditor.tsx` detects phones (< 768px). On phones, `editor.js` canvas is never loaded; instead `MobileEditorView` renders a vertical passage-card list + full-screen passage editor. ID rename, choice editing (reusing `ice-*` classes), add/delete passage, and Play button all work. Safe-area insets and dark mode fully supported.
 
 ---
 

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { StoryData } from '../lib/storyValidator';
+import { MobileEditorView } from './MobileEditorView';
 
 function HelpModal({ onClose }: { onClose: () => void }) {
   return (
@@ -106,6 +107,20 @@ function HelpModal({ onClose }: { onClose: () => void }) {
   );
 }
 
+/** Returns true when the viewport is phone-sized (< 768 px). Responds to resize. */
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches
+  );
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 767px)');
+    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
+  return isMobile;
+}
+
 type Props = {
   story: StoryData | null;
   activeStoryId: string;
@@ -115,6 +130,7 @@ type Props = {
 };
 
 export function StoryEditor({ story, activeStoryId, setStoryStatus, onLoadStoryByPath, onStoryChange }: Props) {
+  const isMobile = useIsMobile();
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   const destroyRef = useRef<(() => void) | undefined>(undefined);
@@ -144,6 +160,8 @@ export function StoryEditor({ story, activeStoryId, setStoryStatus, onLoadStoryB
   }, []);
 
   useEffect(() => {
+    // On mobile, the canvas editor is replaced by MobileEditorView — don't load editor.js
+    if (isMobile) return;
     if (!story) return;
     (window as any).storyData = story;
     (window as any).activeStoryId = activeStoryId;
@@ -169,7 +187,18 @@ export function StoryEditor({ story, activeStoryId, setStoryStatus, onLoadStoryB
       destroyRef.current?.();
       destroyRef.current = undefined;
     };
-  }, [story, activeStoryId, setStoryStatus, onLoadStoryByPath]);
+  }, [story, activeStoryId, setStoryStatus, onLoadStoryByPath, isMobile]);
+
+  // On phones, render the passage-list mobile editor instead of the canvas
+  if (isMobile) {
+    return (
+      <MobileEditorView
+        story={story}
+        onStoryChange={onStoryChange}
+        setStoryStatus={setStoryStatus}
+      />
+    );
+  }
 
   return (
     <div id="editor-mode" className="mode">
