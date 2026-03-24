@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { StoryData } from '../lib/storyValidator';
 
 type Choice = { text: string; target: string; condition: string; effect: string };
+type ClauseParts = { varPath: string; op: string; value: string };
 
 type Props = {
   story: StoryData | null;
@@ -10,6 +11,197 @@ type Props = {
 };
 
 const ID_PATTERN = /^[a-zA-Z0-9_-]+$/;
+
+// ---------------------------------------------------------------------------
+// Variable helpers
+
+type VarInfo = { path: string; defaultValue: unknown; namespace: string };
+
+function getVarPaths(story: StoryData): VarInfo[] {
+  const result: VarInfo[] = [];
+  const vars = story.variables || {};
+  for (const ns of ['inventory', 'relationships', 'flags'] as const) {
+    const nsVars = (vars[ns] || {}) as Record<string, unknown>;
+    for (const key of Object.keys(nsVars)) {
+      result.push({ path: `${ns}.${key}`, defaultValue: nsVars[key], namespace: ns });
+    }
+  }
+  return result;
+}
+
+/** Operators allowed for each namespace in effects. */
+function effectOpsFor(namespace: string): string[] {
+  return namespace === 'relationships' ? ['+=', '-=', '='] : ['='];
+}
+
+// ---------------------------------------------------------------------------
+// Simple clause parsers
+
+function parseSimpleCondition(s: string): ClauseParts | null {
+  const m = s.match(/^(\S+)\s*(==|!=|>=|<=|>|<)\s*(.+)$/);
+  if (!m) return null;
+  return { varPath: m[1].trim(), op: m[2], value: m[3].trim() };
+}
+
+function parseSimpleEffect(s: string): ClauseParts | null {
+  // Order matters: try += and -= before = to avoid partial matches
+  const m = s.match(/^(\S+)\s*(\+=|-=|=)\s*(.+)$/);
+  if (!m) return null;
+  return { varPath: m[1].trim(), op: m[2], value: m[3].trim() };
+}
+
+// ---------------------------------------------------------------------------
+// Clause builder sub-components
+
+function ConditionField({
+  value, onChange, onBlur, varInfos,
+}: { value: string; onChange: (v: string) => void; onBlur: () => void; varInfos: VarInfo[] }) {
+  const parsed = value ? parseSimpleCondition(value) : null;
+  const isComplex = value && !parsed;
+
+  // Complex multi-clause condition → raw text fallback
+  if (isComplex) {
+    return (
+      <input className="ice-cond" type="text" value={value}
+        placeholder="condition"
+        onChange={e => onChange(e.target.value)}
+        onBlur={onBlur} />
+    );
+  }
+
+  const vp = parsed?.varPath ?? '';
+  const op = parsed?.op ?? '==';
+  const val = parsed?.value ?? '';
+  const varInfo = varInfos.find(v => v.path === vp);
+  const isBool = varInfo && typeof varInfo.defaultValue === 'boolean';
+  const isNum = varInfo && typeof varInfo.defaultValue === 'number';
+
+  return (
+    <div className="mev-clause-builder mev-cond-builder">
+      <select className="clause-var"
+        value={vp}
+        onChange={e => {
+          const newVar = e.target.value;
+          if (!newVar) { onChange(''); return; }
+          const newInfo = varInfos.find(v => v.path === newVar);
+          const defVal = newInfo?.namespace === 'flags' ? 'true' : '0';
+          onChange(`${newVar} ${op} ${val || defVal}`);
+        }}
+        onBlur={onBlur}
+      >
+        <option value="">— condition —</option>
+        {varInfos.map(v => <option key={v.path} value={v.path}>{v.path}</option>)}
+      </select>
+      {vp && (
+        <>
+          <select className="clause-op"
+            value={op}
+            onChange={e => onChange(`${vp} ${e.target.value} ${val}`)}
+            onBlur={onBlur}
+          >
+            {['==', '!=', '>=', '<=', '>', '<'].map(o => <option key={o} value={o}>{o}</option>)}
+          </select>
+          {isBool
+            ? (
+              <select className="clause-val"
+                value={val === 'false' ? 'false' : 'true'}
+                onChange={e => onChange(`${vp} ${op} ${e.target.value}`)}
+                onBlur={onBlur}
+              >
+                <option value="true">true</option>
+                <option value="false">false</option>
+              </select>
+            )
+            : (
+              <input className="clause-val" type={isNum ? 'number' : 'text'}
+                value={val}
+                placeholder={isNum ? '0' : 'value'}
+                onChange={e => onChange(`${vp} ${op} ${e.target.value}`)}
+                onBlur={onBlur} />
+            )}
+        </>
+      )}
+    </div>
+  );
+}
+
+function EffectField({
+  value, onChange, onBlur, varInfos,
+}: { value: string; onChange: (v: string) => void; onBlur: () => void; varInfos: VarInfo[] }) {
+  const parsed = value ? parseSimpleEffect(value) : null;
+  const isComplex = value && !parsed;
+
+  if (isComplex) {
+    return (
+      <input className="ice-effect" type="text" value={value}
+        placeholder="effect"
+        onChange={e => onChange(e.target.value)}
+        onBlur={onBlur} />
+    );
+  }
+
+  const vp = parsed?.varPath ?? '';
+  const op = parsed?.op ?? '=';
+  const val = parsed?.value ?? '';
+  const varInfo = varInfos.find(v => v.path === vp);
+  const isBool = varInfo && typeof varInfo.defaultValue === 'boolean';
+  const isNum = varInfo && typeof varInfo.defaultValue === 'number';
+  const opsAllowed = varInfo ? effectOpsFor(varInfo.namespace) : ['=', '+=', '-='];
+  const safeOp = opsAllowed.includes(op) ? op : opsAllowed[0];
+
+  return (
+    <div className="mev-clause-builder mev-effect-builder">
+      <select className="clause-var"
+        value={vp}
+        onChange={e => {
+          const newVar = e.target.value;
+          if (!newVar) { onChange(''); return; }
+          const newInfo = varInfos.find(v => v.path === newVar);
+          const newOp = effectOpsFor(newInfo?.namespace ?? '')[0];
+          const defVal = newInfo?.namespace === 'flags' ? 'true'
+            : newInfo?.namespace === 'relationships' ? '1' : '1';
+          onChange(`${newVar} ${newOp} ${val || defVal}`);
+        }}
+        onBlur={onBlur}
+      >
+        <option value="">— no effect —</option>
+        {varInfos.map(v => <option key={v.path} value={v.path}>{v.path}</option>)}
+      </select>
+      {vp && (
+        <>
+          <select className="clause-op"
+            value={safeOp}
+            onChange={e => onChange(`${vp} ${e.target.value} ${val}`)}
+            onBlur={onBlur}
+          >
+            {opsAllowed.map(o => <option key={o} value={o}>{o}</option>)}
+          </select>
+          {isBool
+            ? (
+              <select className="clause-val"
+                value={val === 'false' ? 'false' : 'true'}
+                onChange={e => onChange(`${vp} ${safeOp} ${e.target.value}`)}
+                onBlur={onBlur}
+              >
+                <option value="true">true</option>
+                <option value="false">false</option>
+              </select>
+            )
+            : (
+              <input className="clause-val" type={isNum ? 'number' : 'text'}
+                value={val}
+                placeholder={isNum ? '0' : 'value'}
+                onChange={e => onChange(`${vp} ${safeOp} ${e.target.value}`)}
+                onBlur={onBlur} />
+            )}
+        </>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Passage status badge
 
 function getPassageStatus(passageId: string, story: StoryData) {
   const p = story.passages[passageId];
@@ -25,6 +217,9 @@ function nextPassageId(passages: StoryData['passages']): string {
   while (passages[`passage_${n}`]) n++;
   return `passage_${n}`;
 }
+
+// ---------------------------------------------------------------------------
+// Main component
 
 export function MobileEditorView({ story, onStoryChange, setStoryStatus }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -52,13 +247,7 @@ export function MobileEditorView({ story, onStoryChange, setStoryStatus }: Props
 
   // --- Helpers -----------------------------------------------------------------
 
-  /** Build an updated story object with `text` and `choices` saved to `id`. */
-  function buildStory(
-    id: string,
-    text: string,
-    choices: Choice[],
-    base: StoryData
-  ): StoryData {
+  function buildStory(id: string, text: string, choices: Choice[], base: StoryData): StoryData {
     const passages = { ...base.passages };
     passages[id] = {
       ...passages[id],
@@ -75,13 +264,11 @@ export function MobileEditorView({ story, onStoryChange, setStoryStatus }: Props
     return { ...base, passages };
   }
 
-  /** Commit the current local text + choices to the story. */
   function commitPassage(text = localText, choices = localChoices) {
     if (!editingId || !story) return;
     onStoryChange(structuredClone(buildStory(editingId, text, choices, story)));
   }
 
-  /** Apply an ID rename: commit pending edits first, then rename everywhere. */
   function applyIdRename() {
     if (!editingId || !story) return;
     const newId = localId.trim();
@@ -98,7 +285,6 @@ export function MobileEditorView({ story, onStoryChange, setStoryStatus }: Props
     }
     setIdError('');
 
-    // Commit text/choices to old ID first, then rename
     const base = buildStory(editingId, localText, localChoices, story);
     const passages = { ...base.passages };
     passages[newId] = passages[editingId];
@@ -133,7 +319,6 @@ export function MobileEditorView({ story, onStoryChange, setStoryStatus }: Props
     if (!window.confirm(`Delete passage "${editingId}"? This cannot be undone.`)) return;
     const passages = { ...story.passages };
     delete passages[editingId];
-    // Blank out any targets that pointed here so they show as dangling (fixable)
     Object.values(passages).forEach(p => {
       (p.choices || []).forEach(ch => { if (ch.target === editingId) ch.target = ''; });
     });
@@ -167,13 +352,15 @@ export function MobileEditorView({ story, onStoryChange, setStoryStatus }: Props
     );
   }
 
-  // --- Passage detail editor ---------------------------------------------------
-
   const passageIds = Object.keys(story.passages).sort((a, b) => {
     if (a === 'start') return -1;
     if (b === 'start') return 1;
     return a.localeCompare(b);
   });
+
+  const varInfos = getVarPaths(story);
+
+  // --- Passage detail editor ---------------------------------------------------
 
   if (editingId && story.passages[editingId]) {
     return (
@@ -203,11 +390,6 @@ export function MobileEditorView({ story, onStoryChange, setStoryStatus }: Props
 
         {/* Scrollable body */}
         <div className="mev-detail-body">
-
-          {/* Target autocomplete datalist */}
-          <datalist id="mev-passage-ids">
-            {Object.keys(story.passages).map(id => <option key={id} value={id} />)}
-          </datalist>
 
           {/* Passage text */}
           <label className="mev-field-label" htmlFor="mev-text-input">Passage Text</label>
@@ -242,15 +424,19 @@ export function MobileEditorView({ story, onStoryChange, setStoryStatus }: Props
                     onChange={e => updateChoice(idx, { text: e.target.value })}
                     onBlur={() => commitPassage()}
                   />
-                  <input
+                  {/* Target: native <select> for reliable mobile dropdown */}
+                  <select
                     className="ice-target"
-                    type="text"
-                    list="mev-passage-ids"
-                    placeholder="target id"
                     value={ch.target}
                     onChange={e => updateChoice(idx, { target: e.target.value })}
                     onBlur={() => commitPassage()}
-                  />
+                  >
+                    <option value="">— target —</option>
+                    {passageIds.map(id => <option key={id} value={id}>{id}</option>)}
+                    {ch.target && !story.passages[ch.target] && (
+                      <option value={ch.target}>{ch.target} ⚠</option>
+                    )}
+                  </select>
                   <button
                     type="button"
                     className="ice-delete"
@@ -259,21 +445,17 @@ export function MobileEditorView({ story, onStoryChange, setStoryStatus }: Props
                   >✕</button>
                 </div>
                 <div className="ice-row-meta">
-                  <input
-                    className="ice-cond"
-                    type="text"
-                    placeholder="condition (optional)"
+                  <ConditionField
                     value={ch.condition}
-                    onChange={e => updateChoice(idx, { condition: e.target.value })}
+                    onChange={v => updateChoice(idx, { condition: v })}
                     onBlur={() => commitPassage()}
+                    varInfos={varInfos}
                   />
-                  <input
-                    className="ice-effect"
-                    type="text"
-                    placeholder="effect (optional)"
+                  <EffectField
                     value={ch.effect}
-                    onChange={e => updateChoice(idx, { effect: e.target.value })}
+                    onChange={v => updateChoice(idx, { effect: v })}
                     onBlur={() => commitPassage()}
+                    varInfos={varInfos}
                   />
                 </div>
               </div>

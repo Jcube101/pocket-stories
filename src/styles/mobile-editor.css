@@ -122,6 +122,7 @@
   -webkit-user-select: none;
   transition: background 120ms ease, border-color 120ms ease;
   min-height: 72px;
+  overflow: hidden;
 }
 
 .mev-passage-card:active,
@@ -293,6 +294,82 @@
 
 .mev-btn-danger:active { background: #fee2e2; }
 
+/* ── Choice editor overrides for mobile ────────────────────────────────── */
+
+/* Stack condition and effect builders vertically so each gets full width */
+.mev-shell .ice-row-meta {
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+/* Target <select> inherits ice-target styles; ensure cursor is correct */
+select.ice-target {
+  cursor: pointer;
+}
+
+/* ── Clause builders (condition / effect guided pickers) ────────────────── */
+
+.mev-clause-builder {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  width: 100%;
+  min-width: 0;
+}
+
+/* Variable selector — takes most of the width */
+.mev-clause-builder .clause-var {
+  flex: 2;
+  min-width: 0;
+  font-size: 0.72rem;
+  padding: 0.18rem 0.3rem;
+  border-radius: 4px;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  color: inherit;
+  font-family: monospace;
+  cursor: pointer;
+}
+
+/* Operator selector — compact */
+.mev-clause-builder .clause-op {
+  flex-shrink: 0;
+  font-size: 0.72rem;
+  padding: 0.18rem 0.2rem;
+  border-radius: 4px;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  color: inherit;
+  font-family: monospace;
+  cursor: pointer;
+  min-width: 2.5rem;
+}
+
+/* Value input/select */
+.mev-clause-builder .clause-val {
+  flex: 1.2;
+  min-width: 0;
+  font-size: 0.72rem;
+  padding: 0.18rem 0.3rem;
+  border-radius: 4px;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  color: inherit;
+  font-family: monospace;
+  cursor: pointer;
+}
+
+/* Remove default browser number spinners */
+.mev-clause-builder .clause-val[type="number"]::-webkit-inner-spin-button,
+.mev-clause-builder .clause-val[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/* Colour-code left border to match ice-cond (amber) / ice-effect (purple) */
+.mev-cond-builder .clause-var { border-left: 3px solid #d97706; }
+.mev-effect-builder .clause-var { border-left: 3px solid #7c3aed; }
+
 /* ── Dark mode ──────────────────────────────────────────────────────────── */
 
 @media (prefers-color-scheme: dark) {
@@ -303,6 +380,9 @@
   .mev-passage-card:focus-visible { background: #1e3142; }
   .mev-back-btn { color: #60a5fa; }
   .mev-btn-danger:active { background: #4b1d1d; }
+  .mev-clause-builder .clause-var,
+  .mev-clause-builder .clause-op,
+  .mev-clause-builder .clause-val { background: #242424; border-color: #444; color: #ddd; }
 }
 
 html[data-theme="dark"] .mev-id-input,
@@ -311,7 +391,13 @@ html[data-theme="dark"] .mev-passage-card { background: #1b2734; border-color: #
 html[data-theme="dark"] .mev-passage-card:active { background: #1e3142; }
 html[data-theme="dark"] .mev-back-btn { color: #60a5fa; }
 html[data-theme="dark"] .mev-btn-danger:active { background: #4b1d1d; }
+html[data-theme="dark"] .mev-clause-builder .clause-var,
+html[data-theme="dark"] .mev-clause-builder .clause-op,
+html[data-theme="dark"] .mev-clause-builder .clause-val { background: #242424; border-color: #444; color: #ddd; }
 
 html[data-theme="light"] .mev-id-input,
 html[data-theme="light"] .mev-text-input { background: #fff; color: #1f2937; border-color: #e2e8f0; }
 html[data-theme="light"] .mev-passage-card { background: #fff; border-color: #e2e8f0; }
+html[data-theme="light"] .mev-clause-builder .clause-var,
+html[data-theme="light"] .mev-clause-builder .clause-op,
+html[data-theme="light"] .mev-clause-builder .clause-val { background: #f8fafc; border-color: #e2e8f0; color: #1f2937; }
