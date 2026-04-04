@@ -1,3 +1,4 @@
+title: "River Oath"
 variables:
   inventory:
     silver_ring: false
@@ -6,8 +7,7 @@ variables:
   relationships:
     Mira: 0
     Ferryman: 0
-  flags:
-    crossed_river: false
+  flags: {}
 
 passages:
   start:
@@ -25,12 +25,24 @@ passages:
     text: |
       You find an old lantern and a rusted token stamped with a river crest.
     choices:
-      - text: "Take both"
-        target: ferryman
+      - text: "Take the lantern"
+        target: crates_token
         effect: "inventory.lantern = true"
-      - text: "Take only token"
+      - text: "Take the token"
         target: ferryman
         effect: "inventory.ferry_token = true"
+      - text: "Take nothing — speak to the ferryman"
+        target: ferryman
+
+  crates_token:
+    text: |
+      Lantern in hand. The rusted token still sits in the crate.
+    choices:
+      - text: "Take the token too"
+        target: ferryman
+        effect: "inventory.ferry_token = true"
+      - text: "The lantern is enough"
+        target: ferryman
 
   mira:
     text: |
@@ -77,6 +89,9 @@ passages:
       - text: "Raise lantern and speak honestly"
         target: good_end
         condition: "inventory.lantern == true && relationships.Ferryman >= 1"
+      - text: "Invoke Mira's trust as your pledge"
+        target: good_end
+        condition: "relationships.Mira >= 2"
       - text: "Stay silent"
         target: neutral_end
 

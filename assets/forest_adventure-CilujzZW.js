@@ -9,8 +9,6 @@ variables:
     Guard: 0
     Dragon: 0
   flags:
-    met_dragon: false
-    opened_gate: false
     promised_alice: false
 
 passages:
@@ -139,45 +137,90 @@ passages:
     choices:
       - text: "Proceed inside"
         target: dragon_chamber
-        effect: "flags.opened_gate = true"
 
   dragon_chamber:
     text: |
       A huge dragon sleeps in the chamber, guarding treasure.
     choices:
       - text: "Sneak past"
-        target: good_end_treasure
-        condition: "relationships.Alice >= 3"
+        target: treasure_room
+        condition: "relationships.Alice >= 3 || flags.promised_alice == true"
       - text: "Offer your potion as tribute"
-        target: dragon_bargain
+        target: dragon_tribute
         condition: "inventory.potion >= 1"
-        effect: "relationships.Dragon += 2"
+        effect: "inventory.potion = 0"
       - text: "Wake the dragon and fight"
         target: dragon_fight
-        effect: "flags.met_dragon = true"
+
+  dragon_tribute:
+    text: |
+      You hold the potion out. The dragon's eye opens, regarding you carefully.
+    choices:
+      - text: "Present it with quiet respect"
+        target: dragon_bargain
+        effect: "relationships.Dragon += 2"
+      - text: "Thrust it forward impatiently"
+        target: dragon_fight
 
   dragon_bargain:
     text: |
-      The dragon opens one eye and accepts the potion with surprising grace.
+      The dragon accepts the offering with surprising grace, then settles back.
+      It watches you, waiting.
     choices:
       - text: "Ask for safe passage"
-        target: good_end_treasure
+        target: treasure_room
         condition: "relationships.Dragon >= 2"
       - text: "Demand treasure now"
         target: dragon_fight
 
   dragon_fight:
     text: |
-      You charge bravely... but the dragon breathes fire. You perish.
+      You charge bravely — but the dragon breathes fire. The heat is overwhelming.
+    choices:
+      - text: "Use the healing potion to fight through the flames"
+        target: dragon_survived
+        condition: "inventory.potion >= 1"
+        effect: "inventory.potion = 0"
+      - text: "Flee — your life is worth more than treasure"
+        target: neutral_end_fled
+
+  dragon_survived:
+    text: |
+      Burned and exhausted, you land a lucky strike. The dragon retreats into the shadows.
+      The treasure room is yours — but you paid a heavy price.
+    choices:
+      - text: "Take what you can carry and go"
+        target: treasure_room
+
+  treasure_room:
+    text: |
+      You reach the treasure, claim it, and escape the castle unharmed.
+    choices:
+      - text: "Return to Alice with a share of the gold"
+        target: good_end_promise
+        condition: "flags.promised_alice == true"
+      - text: "Keep the treasure and leave the forest"
+        target: good_end_alone
+
+  good_end_promise:
+    text: |
+      Alice is exactly where you left her. You made a promise, and you kept it.
+      Between you, the gold changes both your fates.
+
+      Congratulations — you win, and so does she.
     choices: []
 
-  good_end_treasure:
+  good_end_alone:
     text: |
-      Thanks to your choices and allies, you claim the treasure and escape unharmed.
-
-      If you promised Alice, you return with enough gold to change both your fates.
+      You carry the treasure out of the forest alone. A fine haul, and you're alive.
 
       Congratulations! You win.
+    choices: []
+
+  neutral_end_fled:
+    text: |
+      You escape the dragon's fire — but with nothing to show for it.
+      The forest swallows you whole. At least you survived.
     choices: []
 
   bad_end_fight:

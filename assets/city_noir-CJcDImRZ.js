@@ -1,4 +1,4 @@
-title: "City Noir"
+const e=`title: "City Noir"
 variables:
   inventory:
     badge: false
@@ -121,3 +121,4 @@ passages:
       The suspect had a lawyer on the phone before you finished the sentence.
       No evidence, no case. You walk out empty-handed.
     choices: []
+`;export{e as default};

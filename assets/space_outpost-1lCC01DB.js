@@ -1,4 +1,4 @@
-title: "Wreck of the Akaida"
+const e=`title: "Wreck of the Akaida"
 variables:
   inventory:
     oxygen_kit: false
@@ -251,3 +251,4 @@ passages:
 
       The notice doesn't say if she made it.
     choices: []
+`;export{e as default};
