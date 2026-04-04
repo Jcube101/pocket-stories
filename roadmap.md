@@ -1,6 +1,6 @@
 # Pocket Stories — Development Roadmap
 
-Last updated: 2026-03-24. Phases 1–8 complete. See `known-issues.md` for the full bug list and `decisions.md` for the architectural choices that shape this plan.
+Last updated: 2026-04-05. Phases 1–8 complete; P5-3 and post-launch bug fixes done in session 2026-04-05. See `known-issues.md` for the full bug list and `decisions.md` for the architectural choices that shape this plan.
 
 ---
 
@@ -203,9 +203,10 @@ Implemented 2026-03-22 (branch `claude/create-claude-md-ZAKIr`).
 - Auto-run diagnostics (debounced 1.2s) after every `saveState()` mutation — no modal (U6)
 - Richer panel: severity icons (✖/⚠/ℹ), colored count pills, green "✓ No issues found" when clean
 
-### P5-3 Replace `space_outpost.yaml` with a richer demo story — 🔴 Deferred to Phase 6
+### P5-3 Replace `space_outpost.yaml` with a richer demo story — *DONE*
 
-- Deferred in favour of UX fixes; `space_outpost.yaml` remains in place for now
+- Replaced with "Wreck of the Akaida" — 19 passages, 3 endings, conditions using `==`, `>=`, and `&&`
+- Demonstrates: inventory items, numeric relationship (Mira), boolean flags, gated endings, hull breach puzzle, rescue branching
 
 ---
 
@@ -325,6 +326,48 @@ Implemented 2026-03-24 (branch `claude/inspector-choice-editor-ZAKIr`).
 - New `src/styles/mobile-editor.css` with all `.mev-*` classes: shell, top bar, passage list, passage cards, detail header/body, buttons, dark mode overrides via `@media (prefers-color-scheme: dark)` and `html[data-theme="dark"]`
 - `@media (max-width: 767px) .main-content:has(.mev-shell)` rule strips padding and gives the shell full height — same `:has()` pattern as the player
 - `global.css`: `@import './mobile-editor.css'` added after the other three imports
+
+---
+
+## Phase 9 — Post-launch Bug Fixes and Story Polish ✅ COMPLETE
+
+Implemented 2026-04-05.
+
+### P9-1 Fix player layout: passage container placed in wrong grid column — *DONE*
+
+- On desktop (≥900px), `player-layout` uses `grid-template-columns: 2fr 1fr`. With no explicit grid placement, auto-placement put `h2.player-heading` in col 1 and `#passage-container` in col 2 (right side), pushing the history aside to col 1 row 2.
+- Fix: added `grid-column: 1` to `.player-layout > .player-heading` and `.player-layout > #passage-container`; set `.player-history-aside` to `grid-column: 2; grid-row: 1 / span 10`.
+
+### P9-2 Fix redundant "Loaded: story_id" status bar in player mode — *DONE*
+
+- `App.tsx` rendered `{topStatus}` unconditionally above both editor and player. The header already shows which story is loaded.
+- Fix: changed to `{mode === 'editor' && topStatus}` — status bar only shows in editor mode.
+
+### P9-3 Replace `space_outpost.yaml` with "Wreck of the Akaida" — *DONE* (was P5-3)
+
+- 19 passages, 3 endings (justice, anonymous tip, disappear), full puzzle branching.
+- Operators used: `==`, `>=`, `&&`. Effects: `=`, `+=`. All variable types exercised.
+
+### P9-4 Audit and fix all built-in YAML stories — *DONE*
+
+**river_oath.yaml:**
+- Bug fixed: "Take both" choice in `crates` only applied one effect (set lantern but not token). Split into `crates` → `crates_token` two-step so both items are obtainable.
+- Added: `relationships.Mira >= 2` as a third crossing path — Mira's trust now gates gameplay.
+
+**city_noir.yaml:**
+- Bug fixed: `alley_talk` was a dead end — asking the informant for details gave relationship points but never handed over the evidence envelope, making the good ending unreachable from that path.
+- Added: `alley_trust` passage to let players build informant trust after taking the envelope.
+- Added: `best_end` passage gated by `inventory.evidence == true && relationships.Informant >= 2` — uses `&&` and `>=` for the first time in this story.
+- Added: `!inventory.evidence` condition (`!` operator) in `confronted` passage.
+- Added: `confronted` passage with conditional outcomes; reckless arrest only shows when evidence is missing.
+
+**forest_adventure.yaml:**
+- Removed `flags.opened_gate` and `flags.met_dragon` — declared but never used in any condition; also removed their effect assignments.
+- Fixed: `flags.promised_alice` was declared but never used in a condition. "Sneak past" condition changed to `relationships.Alice >= 3 || flags.promised_alice == true` (introduces `||`).
+- Added: `dragon_tribute` two-step passage for offering the potion (properly consumes it with one effect, earns Dragon trust in a second step).
+- Added: `dragon_fight` survival path using potion; `dragon_survived` passage; `neutral_end_fled` ending.
+- Added: `treasure_room` hub with choice between `good_end_promise` (kept promise to Alice) and `good_end_alone` — the promise flag now produces a distinct ending.
+- Result: 4 endings (good_promise, good_alone, neutral_fled, bad_end_fight), `||` operator now used.
 
 ---
 

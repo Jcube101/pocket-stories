@@ -1,6 +1,6 @@
 # Pocket Stories — Known Issues
 
-Bugs and gaps found during the initial codebase audit (2026-03-10). Updated 2026-03-19 after CSS @import hotfix. Updated 2026-03-22 after UI overhaul, inspector/diagnostics improvements, and choice editor + UX polish. Updated 2026-03-24 after mobile polish (P8A player + P8B editor). Each item links to the relevant roadmap item in `roadmap.md`.
+Bugs and gaps found during the initial codebase audit (2026-03-10). Updated 2026-03-19 after CSS @import hotfix. Updated 2026-03-22 after UI overhaul, inspector/diagnostics improvements, and choice editor + UX polish. Updated 2026-03-24 after mobile polish (P8A player + P8B editor). Updated 2026-04-05 after player layout bug fixes and full story audit (P9). Each item links to the relevant roadmap item in `roadmap.md`.
 
 **Status key:** ✅ Fixed | 🔴 Open
 
@@ -104,8 +104,9 @@ Bugs and gaps found during the initial codebase audit (2026-03-10). Updated 2026
 ~~Compound conditions undocumented.~~
 **Fix:** `&&` / `||` / `!` fully supported by `conditionEvaluator.ts` (P2-2). Story YAML cleanup done (P3-5). Compound condition in `river_oath.yaml` verified working.
 
-### Y3 — Redundant condition in `space_outpost.yaml` ✅ Resolved (2026-03-22)
-`space_outpost.yaml` replaced with `hearts_and_ashes.yaml` — a long-form love triangle story with ~35 passages, multiple loops, and multiple endings.
+### Y3 — `space_outpost.yaml` too thin to demonstrate engine capabilities ✅ Fixed (P5-3 / P9-3, 2026-04-05)
+~~8 passages, single linear path, only `==` conditions, no `&&`/`>=`, trivial variable use.~~
+**Fix:** Replaced with "Wreck of the Akaida" — 19 passages, 3 endings, `==`/`>=`/`&&` conditions, all three variable types, hull breach puzzle, rescue branching.
 
 ---
 
@@ -171,6 +172,46 @@ The canvas editor (360px fixed sidebar + SVG graph + inspector) overflowed phone
 
 ---
 
+## Player layout and status bar (2026-04-05)
+
+### U12 — Passage container placed in wrong grid column on desktop ✅ Fixed (P9-1)
+On desktop (≥900px), `player-layout` switched to `grid-template-columns: 2fr 1fr`. Without explicit column assignments, CSS auto-placement put `h2.player-heading` in col 1 and `#passage-container` in col 2 (right side), pushing `.player-history-aside` to col 1 row 2. The story appeared on the right; the history appeared below the title on the left.
+**Fix:** `player.css` — added `grid-column: 1` to `.player-layout > .player-heading` and `.player-layout > #passage-container`; set `.player-history-aside` to `grid-column: 2; grid-row: 1 / span 10`.
+
+### U13 — Redundant "Loaded: story_id" status bar shown in player mode ✅ Fixed (P9-2)
+`App.tsx` rendered `{topStatus}` unconditionally above both editor and player. The header right already shows which story is loaded, making the status bar in player mode redundant and distracting.
+**Fix:** Changed to `{mode === 'editor' && topStatus}` — status bar only renders in editor mode.
+
+---
+
+## Story YAML bugs (2026-04-05)
+
+### Y4 — `river_oath.yaml`: "Take both" only applied one effect ✅ Fixed (P9-4)
+The `crates` passage had a choice labelled "Take both" that only set `inventory.lantern = true` — the one-effect-per-choice constraint meant `inventory.ferry_token` was never set. Players who chose "Take both" could not subsequently pay the ferryman with a token despite expecting to have one.
+**Fix:** Split into two passages: `crates` with "Take the lantern" (effect: `lantern = true`) → new `crates_token` passage with optional "Take the token too" (effect: `ferry_token = true`).
+
+### Y5 — `river_oath.yaml`: `relationships.Mira` set but never used in a condition ✅ Fixed (P9-4)
+Mira's trust was tracked and could be raised or lowered but had no conditional effect on any passage. Building trust with Mira produced no gameplay difference.
+**Fix:** Added a third path through `crossing`: "Invoke Mira's trust as your pledge" gated by `relationships.Mira >= 2`.
+
+### Y6 — `city_noir.yaml`: `alley_talk` was a dead end for evidence ✅ Fixed (P9-4)
+Choosing "Ask for details first" in `alley` gave `relationships.Informant += 2` but then went directly to `club_floor` with no evidence. The `good_end` and `best_end` both require evidence, so the entire informant-detail path could never reach a good outcome.
+**Fix:** `alley_talk` now also hands over the evidence envelope at the end of the conversation.
+
+### Y7 — `city_noir.yaml`: `relationships.Informant` tracked but never used in a condition ✅ Fixed (P9-4)
+The informant's trust was set via `+=` / `-=` effects but no condition in the story ever checked it. Cultivating the relationship had no gameplay impact.
+**Fix:** Added `best_end` passage gated by `inventory.evidence == true && relationships.Informant >= 2`. Added `alley_trust` passage to let envelope-takers also build informant trust. Added `confronted` passage with `!inventory.evidence` condition.
+
+### Y8 — `forest_adventure.yaml`: Three flags declared but never used in conditions ✅ Fixed (P9-4)
+`flags.opened_gate`, `flags.met_dragon`, and `flags.promised_alice` were all declared in `variables:`. Only `promised_alice` was even set; none were ever checked in a condition gate. The effects that set `opened_gate` and `met_dragon` were dead writes.
+**Fix:** Removed `opened_gate` and `met_dragon` from variables and their effect assignments. `promised_alice` is now checked: "Sneak past" dragon uses `relationships.Alice >= 3 || flags.promised_alice == true`; the `treasure_room` hub offers `good_end_promise` (distinct ending) when the flag is true.
+
+### Y9 — `forest_adventure.yaml`: `dragon_fight` was a permanent dead end ✅ Fixed (P9-4)
+Choosing to fight the dragon ended the story with `choices: []` and no further options — no survival path, no retreat. Players with an unused potion had no way to spend it in the fight.
+**Fix:** `dragon_fight` now has two choices: "Use the healing potion to fight through" (condition: `inventory.potion >= 1`, effect: `inventory.potion = 0`) → `dragon_survived` → `treasure_room`; or "Flee" → `neutral_end_fled`. Added `dragon_survived` and `neutral_end_fled` passages.
+
+---
+
 ## Audit methodology note
 
-Initial issue list produced by full static analysis in March 2026. Updated after all three phases (P1, P2, P3) completion. Updated again 2026-03-22 after Phase 4 (UI overhaul) and Phase 5 (inspector + diagnostics). Issues numbered by category prefix (B = blocking/broken, U = UX, C = config/tooling, Y = YAML quality, S = styles). Original line numbers referenced the state at commit `f879a6d`.
+Initial issue list produced by full static analysis in March 2026. Updated after all three phases (P1, P2, P3) completion. Updated again 2026-03-22 after Phase 4 (UI overhaul) and Phase 5 (inspector + diagnostics). Updated 2026-04-05 after Phase 9 post-launch fixes (player layout bugs U12–U13, story YAML bugs Y4–Y9). Issues numbered by category prefix (B = blocking/broken, U = UX, C = config/tooling, Y = YAML quality, S = styles). Original line numbers referenced the state at commit `f879a6d`.

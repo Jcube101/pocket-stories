@@ -226,7 +226,7 @@ export default function App() {
       </header>
 
       <main className="main-content">
-        {topStatus}
+        {mode === 'editor' && topStatus}
         {showWarnings && storyWarnings.length > 0 && (
           <div className="story-status warning" role="alert">
             <strong>Story warnings:</strong>

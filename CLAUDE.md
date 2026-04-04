@@ -61,6 +61,10 @@ pocket-stories/
 │   │   ├── storyValidator.ts    # Validates + normalizes story YAML structure
 │   │   └── yamlLoader.ts        # Loads stories via import.meta.glob + parses raw YAML
 │   ├── stories/                 # YAML story sources (bundled with the app)
+│   │   ├── space_outpost.yaml   # "Wreck of the Akaida" — 19p, 3 endings, ==/>=/&&
+│   │   ├── forest_adventure.yaml # 23p, 4 endings, ==/>=/||, all effect types
+│   │   ├── city_noir.yaml       # 12p, 4 endings, ==/>=/ &&/!
+│   │   └── river_oath.yaml      # 10p, 3 endings, ==/>=/ &&
 │   └── styles/
 │       ├── global.css           # Tailwind directives + @imports + theme overrides
 │       ├── base.css             # Resets, body, base element styles
@@ -116,7 +120,7 @@ The header is a flex row:
 
 ## Known Issues
 
-All Phase 1–8B items are complete. No open issues remain. CSS @import ordering bug (S2) introduced by P3-2 was hotfixed 2026-03-19. Node inspector overlap (U4) fixed 2026-03-22. Inspector click reliability (U7/U8) fixed 2026-03-22. Choice editor in inspector, ID rename UX polish, and undo limit raised to 100 (P7, 2026-03-22). Mobile player: full-screen immersive layout, history bottom drawer, tap-to-skip typewriter (P8A, 2026-03-24). Mobile editor: passage-list mode on phones, MobileEditorView component, useIsMobile hook (P8B, 2026-03-24).
+All Phase 1–9 items are complete. No open issues remain. CSS @import ordering bug (S2) introduced by P3-2 was hotfixed 2026-03-19. Node inspector overlap (U4) fixed 2026-03-22. Inspector click reliability (U7/U8) fixed 2026-03-22. Choice editor in inspector, ID rename UX polish, and undo limit raised to 100 (P7, 2026-03-22). Mobile player: full-screen immersive layout, history bottom drawer, tap-to-skip typewriter (P8A, 2026-03-24). Mobile editor: passage-list mode on phones, MobileEditorView component, useIsMobile hook (P8B, 2026-03-24). Player layout grid bug and redundant status bar fixed (U12/U13, 2026-04-05). All four built-in stories audited and fixed: river_oath "take both" bug, city_noir informant dead-end, forest_adventure unused flags and dragon dead-end, space_outpost replaced with "Wreck of the Akaida" (P9, 2026-04-05).
 
 Full history: `known-issues.md`
 
@@ -234,6 +238,7 @@ Conditions support: `==`, `!=`, `>=`, `<=`, `>`, `<`, `&&`, `||`, `!`. Evaluated
 ### `src/styles/player.css`
 - Contains all 2026 UI overrides (sidebar layout, tools grid, view mode buttons, inspector meta styles, diagnostics styles).
 - `#graph-container { display: flex }` — places `#canvas-wrapper` (flex: 1) beside `#node-inspector` (width: 320px).
+- `.player-layout` on desktop (≥900px): `grid-template-columns: 2fr 1fr`. **Must explicitly set `grid-column: 1` on `.player-heading` and `#passage-container`, and `grid-column: 2; grid-row: 1 / span 10` on `.player-history-aside`.** Without explicit placement, CSS auto-placement puts the passage in col 2 and the aside in col 1 row 2 (U12).
 
 ---
 
@@ -334,3 +339,7 @@ Branches follow `claude/<task-slug>-<session-id>`. Always push to the branch spe
 14. **`saveState()` only fires on actual node moves** — The node `onMouseUp` handler checks `hasMoved` (movement > 3px) before calling `saveState()`. This prevents every node click from pushing an undo entry and triggering a React re-render via `onStoryChange`.
 
 15. **Help modal is a React component in `StoryEditor.tsx`** — `HelpModal` is defined at the top of the file (before the `StoryEditor` component). `showHelp` state is in `StoryEditor`. The `HelpModal` renders as a fixed full-screen overlay. It does not use a portal — it renders inside the editor's DOM tree, which is fine since it's `position: fixed`.
+
+16. **`topStatus` only renders in editor mode** — `App.tsx` wraps `{topStatus}` with `{mode === 'editor' && topStatus}`. Do not render it unconditionally — it is redundant in player mode where the header already shows the loaded story (U13).
+
+17. **Adding a built-in story also requires copying to `public/stories/`** — `src/stories/` is bundled via `import.meta.glob`; `public/stories/` serves the raw YAML as a static asset. Both must be updated when adding or modifying a story file.

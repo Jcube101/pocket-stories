@@ -1022,6 +1022,18 @@ body {
   .player-layout { grid-template-columns: 2fr 1fr; }
   .main-content { padding: var(--space-4) var(--space-5); }
   .player-layout { padding: var(--space-8) var(--space-5) var(--space-10); }
+
+  /* Pin heading and passage to the left column so the aside can claim the right */
+  .player-layout > .player-heading,
+  .player-layout > #passage-container {
+    grid-column: 1;
+  }
+
+  /* History aside always occupies the right column, spanning all rows */
+  .player-history-aside {
+    grid-column: 2;
+    grid-row: 1 / span 10;
+  }
 }
 
 /* ── Mobile Player: Full-screen immersive layout ────────────────────────────
