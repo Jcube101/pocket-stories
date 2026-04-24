@@ -163,7 +163,7 @@ export function StoryEditor({ story, activeStoryId, setStoryStatus, onLoadStoryB
     // On mobile, the canvas editor is replaced by MobileEditorView — don't load editor.js
     if (isMobile) return;
     if (!story) return;
-    (window as any).storyData = structuredClone(story);
+    (window as any).storyData = story;
     (window as any).activeStoryId = activeStoryId;
     (window as any).setStoryStatus = setStoryStatus;
     (window as any).loadStoryByPath = onLoadStoryByPath;
