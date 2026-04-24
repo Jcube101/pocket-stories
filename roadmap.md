@@ -396,27 +396,44 @@ Implemented 2026-04-24 after a full 13-risk codebase audit. See `known-issues.md
 - Added `"prebuild": "cp src/stories/*.yaml public/stories/"` to `package.json`
 - Runs automatically before every `npm run build`
 
+### P10-5 Passage ID validation at YAML boundary (RISK-8) — *DONE*
+
+- `validateAndNormalizeStory()` now checks each passage ID against `/^[a-zA-Z0-9_-]+$/`
+- Non-conforming IDs produce a warning (story still loads)
+
+### P10-6 Unify dark mode CSS (RISK-10) — *DONE*
+
+- All 14 `@media (prefers-color-scheme: dark)` blocks deleted from `editor-graph.css`
+- Consolidated `@media` block added to `global.css` for auto mode
+- All 3 `@media (prefers-color-scheme: light)` blocks also migrated; two missing `html[data-theme="light"]` rules added
+
+### P10-7 Fix modal dark mode (RISK-11) — *DONE*
+
+- `showModal()` reads `document.documentElement.dataset.theme` first, falls back to `matchMedia`
+
+### P10-8 Clear stale highlight sets on story switch (RISK-4) — *DONE*
+
+- All 9 highlighted sets, `diagnosticsState`, `downstreamHighlight`, `hoveredNodeId` cleared at top of `initEditor()`
+
+### P10-9 Eliminate import registration gap (RISK-6) — *DONE*
+
+- `registerImportedStoryEntry` uses `??=` with `storiesRef` pattern — assigned once, never deleted, never briefly undefined
+
 ---
 
 ## Future — Not yet scheduled
 
-Items identified by the 2026-04-24 audit that require larger design work.
+### F1 — Stable editor-owned state object — decouple `window.storyData` identity from React re-render cycle (RISK-5)
 
-### F1 — Decouple `window.storyData` from React state (RISK-5)
+**Estimated complexity: High** (design session required before any implementation).
 
-Introduce a stable editor-owned state object that `editor.js` owns and React never touches. Undo/redo writes to this object; React receives clones via `onStoryChange`. Required before the notification-time `structuredClone` can be safely removed. Should be done alongside editor modularization (Decision 1, Option B). See `decisions.md` Decision 8.
+Introduce a stable state object that `editor.js` owns and React never touches. Undo/redo writes to this object; React receives clones via `onStoryChange`. Required before the notification-time `structuredClone` can be safely removed. Should be done alongside editor modularization (Decision 1, Option B). See `decisions.md` Decision 8 for the full mechanism analysis and why `structuredClone` at the assignment site was rejected.
 
-### F2 — Validate passage IDs at YAML boundary (RISK-8)
+### ~~F2 — Validate passage IDs at YAML boundary (RISK-8)~~ *DONE* (P10-5)
 
-Add `/^[a-zA-Z0-9_-]+$/` check in `validateAndNormalizeStory()` for passage IDs. Currently only enforced in the editor rename UI. YAML-imported IDs bypass validation and can break `querySelector` calls.
+### ~~F3 — Unify dark mode CSS (RISK-10)~~ *DONE* (P10-6)
 
-### F3 — Unify dark mode CSS (RISK-10)
-
-Migrate `editor-graph.css` dark blocks from `@media (prefers-color-scheme: dark)` to `html[data-theme]` selectors. Both systems currently coexist; the data-theme selectors win by specificity. No current bug, but a maintenance trap.
-
-### F4 — Fix modal dark mode to respect theme toggle (RISK-11)
-
-`showModal()` in `editor.js` uses `window.matchMedia` instead of checking `data-theme`. Cosmetic only — modal colors may not match the chosen theme.
+### ~~F4 — Fix modal dark mode to respect theme toggle (RISK-11)~~ *DONE* (P10-7)
 
 ---
 

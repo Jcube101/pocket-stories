@@ -228,21 +228,33 @@ Issues identified by a full codebase audit. Prefix: R = risk from audit register
 ~~`saveState()` set a 1.2-second debounced timer. If the editor unmounted within that window, the timer fired after destruction. Survived only by a defensive null check in `validateStory()`.~~
 **Fix:** Added `clearTimeout(_autoDiagnosticsTimer); _autoDiagnosticsTimer = null` to `destroyEditor()`.
 
+### R4 — Stale highlight sets flash during story switch ✅ Fixed (2026-04-24)
+~~Module-level highlight sets (`highlightedCycleNodes`, `highlightedUnreachableNodes`, `highlightedErrorNodes`, etc.), `diagnosticsState`, `downstreamHighlight`, and `hoveredNodeId` were not cleared at the start of `initEditor()`. During the window between `initEditor()` start and `validateStory()` call, stale highlights from the previous story were rendered on the new story's canvas.~~
+**Fix:** All 9 highlighted sets, `diagnosticsState`, `downstreamHighlight`, and `hoveredNodeId` cleared at the top of `initEditor()`.
+
 ### R5 — `window.storyData` is a shared mutable reference 🔴 Open (deferred)
-`StoryEditor.tsx` sets `window.storyData = story` — the same object as React state. The editor mutates it directly. The `structuredClone` at notification time (`window.onStoryChange`) is the sole safety mechanism. Adding `structuredClone` at the assignment site was attempted and reverted — it breaks undo/redo (see `decisions.md` Decision 8). Safe today, but fragile: removing the notification-time clone would cause silent data corruption.
-**Future fix:** Introduce a stable editor-owned state object, decoupled from the React state reference.
+`StoryEditor.tsx` sets `window.storyData = story` — intentionally the same object reference as React's `story` state (no clone). The editor mutates `window.storyData.passages` directly — adding choices, renaming nodes, auto-fixing — then calls `window.onStoryChange(window.storyData)`. The React callback clones at notification time: `setStory(structuredClone(updated))`, creating a separate copy for React's state tree. The `structuredClone` at notification time is the sole safety mechanism.
 
-### R8 — Passage IDs unvalidated at YAML boundary 🔴 Open (deferred)
-`storyValidator.ts` accepts any string key from YAML as a passage ID. The editor and MobileEditorView enforce `/^[a-zA-Z0-9_-]+$/` on renames, but YAML-imported IDs bypass this. A passage ID containing special characters (e.g., `bad"].evil`) would break every `querySelector(`.node[data-id="${id}"]`)` call in `editor.js`.
-**Future fix:** Add passage ID format validation in `validateAndNormalizeStory()`.
+Adding `structuredClone` at the assignment site (`window.storyData = structuredClone(story)`) was attempted and reverted — it breaks undo/redo. The mechanism: `applyStateIncremental()` restores passages by writing directly onto `window.storyData.passages`, then calls `window.onStoryChange(window.storyData)`, which triggers `setStory(structuredClone(...))` → re-render → the `StoryEditor` effect runs → `window.storyData = structuredClone(story)` creates a **new** object. But `applyStateIncremental()` had already written to the previous clone. Each undo writes to an object that is immediately replaced, so undo appears to do nothing. See `decisions.md` Decision 8.
 
-### R10 — Dual dark mode systems — maintenance trap 🔴 Open (partial)
-`editor-graph.css` uses only `@media (prefers-color-scheme: dark)` (14 blocks). `global.css` uses `html[data-theme]` overrides. The data-theme selectors win by specificity when set. No current visible bug — `global.css` covers all major editor-graph.css dark selectors — but adding any new dark-mode CSS to `editor-graph.css` via media query will silently break the manual theme toggle.
-**Future fix:** Migrate `editor-graph.css` dark blocks to `html[data-theme]` selectors for consistency.
+Safe today, but fragile: removing the notification-time clone would cause silent data corruption.
+**Future fix:** Introduce a stable editor-owned state object that `editor.js` owns and React never touches. Undo/redo writes to this object; React receives clones via `onStoryChange`. This decouples the editor's mutable state from React's immutable state model. Estimated complexity: High (design session required before any implementation).
 
-### R11 — Editor modal uses OS dark preference, ignores `data-theme` 🔴 Open (low)
-`showModal()` in `editor.js` checks `window.matchMedia('(prefers-color-scheme: dark)')` to set modal colors. It does not check `document.documentElement.dataset.theme`. User sets Light theme, OS is dark → modal appears with dark background inside a light-themed editor. Cosmetic only.
-**Future fix:** Check `data-theme` attribute first, fall back to media query.
+### R6 — `registerImportedStoryEntry` briefly undefined during effect re-run ✅ Fixed (2026-04-24)
+~~The `useEffect` in `App.tsx` depended on `[stories]`. When `stories` changed, the cleanup function ran `delete window.registerImportedStoryEntry`, then the effect re-created it. During this gap (one microtask), the function was undefined. If a file import happened at exactly this moment, the imported story was lost without feedback.~~
+**Fix:** Replaced with `??=` assignment and a `storiesRef` pattern — the function is assigned once, never deleted, and reads the latest `stories` via the ref.
+
+### R8 — Passage IDs unvalidated at YAML boundary ✅ Fixed (2026-04-24)
+~~`storyValidator.ts` accepted any string key from YAML as a passage ID. The editor and MobileEditorView enforced `/^[a-zA-Z0-9_-]+$/` on renames, but YAML-imported IDs bypassed this. A passage ID containing special characters (e.g., `bad"].evil`) would break every `querySelector(`.node[data-id="${id}"]`)` call in `editor.js`.~~
+**Fix:** Added passage ID format check (`/^[a-zA-Z0-9_-]+$/`) in `validateAndNormalizeStory()`. Non-conforming IDs produce a warning (story still loads).
+
+### R10 — Dual dark mode systems — maintenance trap ✅ Fixed (2026-04-24)
+~~`editor-graph.css` used `@media (prefers-color-scheme: dark)` (14 blocks) and `@media (prefers-color-scheme: light)` (3 blocks). `global.css` used `html[data-theme]` overrides. Any new dark-mode CSS added to `editor-graph.css` via media query would silently break the manual theme toggle.~~
+**Fix:** All 14 dark and 3 light media query blocks deleted from `editor-graph.css`. Consolidated `@media` blocks added to `global.css` for auto mode. Two missing `html[data-theme="light"]` rules added (`#variables h3`, `#add-variable-form`). `editor-graph.css` now has zero `prefers-color-scheme` media queries — all theme logic lives in `global.css`.
+
+### R11 — Editor modal uses OS dark preference, ignores `data-theme` ✅ Fixed (2026-04-24)
+~~`showModal()` in `editor.js` checked `window.matchMedia('(prefers-color-scheme: dark)')` to set modal colors. It did not check `document.documentElement.dataset.theme`. User sets Light theme, OS is dark → modal appeared with dark background inside a light-themed editor.~~
+**Fix:** `showModal()` now reads `document.documentElement.dataset.theme` first, falls back to `matchMedia`.
 
 ### R12 — Manual story file sync between `src/stories/` and `public/stories/` ✅ Fixed (2026-04-24)
 ~~Files had to be manually kept in sync. Divergence would cause bundled stories and static-served stories to differ.~~
@@ -256,4 +268,4 @@ Issues identified by a full codebase audit. Prefix: R = risk from audit register
 
 ## Audit methodology note
 
-Initial issue list produced by full static analysis in March 2026. Updated after all three phases (P1, P2, P3) completion. Updated again 2026-03-22 after Phase 4 (UI overhaul) and Phase 5 (inspector + diagnostics). Updated 2026-04-05 after Phase 9 post-launch fixes (player layout bugs U12–U13, story YAML bugs Y4–Y9). Updated 2026-04-24 after full codebase audit (13-risk register; 5 fixed, 4 deferred). Issues numbered by category prefix (B = blocking/broken, U = UX, C = config/tooling, Y = YAML quality, S = styles, R = audit risk). Original line numbers referenced the state at commit `f879a6d`.
+Initial issue list produced by full static analysis in March 2026. Updated after all three phases (P1, P2, P3) completion. Updated again 2026-03-22 after Phase 4 (UI overhaul) and Phase 5 (inspector + diagnostics). Updated 2026-04-05 after Phase 9 post-launch fixes (player layout bugs U12–U13, story YAML bugs Y4–Y9). Updated 2026-04-24 after full codebase audit (13-risk register; 11 fixed, 1 deferred, 1 false alarm). Issues numbered by category prefix (B = blocking/broken, U = UX, C = config/tooling, Y = YAML quality, S = styles, R = audit risk). Original line numbers referenced the state at commit `f879a6d`.
