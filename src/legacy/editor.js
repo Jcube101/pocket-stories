@@ -58,6 +58,7 @@ let _boundOnWrapperWheel = null;
 let _boundOnTouchStart = null;
 let _boundOnTouchMove = null;
 let _boundOnTouchEnd = null;
+let _boundOnDocGlobalKeyDown = null;
 let showSecondaryEdges = true;
 let inspectorEls = null;
 let editorUiState = { collapsedById: {}, focusCriticalPath: false, canvasViewMode: 'author' };
@@ -1500,6 +1501,8 @@ function bindEditorEvents() {
     wrapper.addEventListener('touchmove', _boundOnTouchMove, { passive: false });
     wrapper.addEventListener('touchend', _boundOnTouchEnd);
 
+    if (_boundOnDocGlobalKeyDown) document.addEventListener('keydown', _boundOnDocGlobalKeyDown);
+
     editorEventsBound = true;
 }
 
@@ -1526,6 +1529,11 @@ function destroyEditor() {
     _boundOnTouchStart = null;
     _boundOnTouchMove = null;
     _boundOnTouchEnd = null;
+
+    if (_boundOnDocGlobalKeyDown) document.removeEventListener('keydown', _boundOnDocGlobalKeyDown);
+
+    if (_autoDiagnosticsTimer) { clearTimeout(_autoDiagnosticsTimer); _autoDiagnosticsTimer = null; }
+    selectedNode = null;
 
     editorEventsBound = false;
 }
@@ -3265,7 +3273,7 @@ if (loadStoryInput) {
 }
 
 // Keyboard shortcuts
-document.addEventListener('keydown', e => {
+_boundOnDocGlobalKeyDown = e => {
     const activeTag = document.activeElement?.tagName;
     const isTypingContext = activeTag === 'INPUT' || activeTag === 'TEXTAREA' || document.activeElement?.isContentEditable;
 
@@ -3342,7 +3350,7 @@ document.addEventListener('keydown', e => {
         e.preventDefault();
         redo();
     }
-});
+};
 
 // One-time sidebar tool bindings (runs once, survives initEditor rebuilds)
 const sidebar = document.getElementById('sidebar');
