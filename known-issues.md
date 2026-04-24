@@ -212,6 +212,48 @@ Choosing to fight the dragon ended the story with `choices: []` and no further o
 
 ---
 
+## Technical audit findings (2026-04-24)
+
+Issues identified by a full codebase audit. Prefix: R = risk from audit register.
+
+### R1 — Leaked anonymous keydown handler fires in player mode ✅ Fixed (2026-04-24)
+~~`editor.js` registered `document.addEventListener('keydown', ...)` with an anonymous function at module scope. `destroyEditor()` only removed the named `_bound*` listeners. The handler persisted in player mode: Delete/Backspace popped a `confirm()` dialog, Ctrl+Z silently corrupted `window.storyData`, Ctrl+S triggered a YAML export.~~
+**Fix:** Converted to named `_boundOnDocGlobalKeyDown`; registered in `bindEditorEvents()`, removed in `destroyEditor()`.
+
+### R2 — `selectedNode` not cleared on destroy ✅ Fixed (2026-04-24)
+~~`destroyEditor()` never set `selectedNode = null`. The variable persisted across mode switches, holding a reference to a detached DOM element and enabling R1's Delete path.~~
+**Fix:** Added `selectedNode = null` to `destroyEditor()`.
+
+### R3 — `_autoDiagnosticsTimer` not cancelled on destroy ✅ Fixed (2026-04-24)
+~~`saveState()` set a 1.2-second debounced timer. If the editor unmounted within that window, the timer fired after destruction. Survived only by a defensive null check in `validateStory()`.~~
+**Fix:** Added `clearTimeout(_autoDiagnosticsTimer); _autoDiagnosticsTimer = null` to `destroyEditor()`.
+
+### R5 — `window.storyData` is a shared mutable reference 🔴 Open (deferred)
+`StoryEditor.tsx` sets `window.storyData = story` — the same object as React state. The editor mutates it directly. The `structuredClone` at notification time (`window.onStoryChange`) is the sole safety mechanism. Adding `structuredClone` at the assignment site was attempted and reverted — it breaks undo/redo (see `decisions.md` Decision 8). Safe today, but fragile: removing the notification-time clone would cause silent data corruption.
+**Future fix:** Introduce a stable editor-owned state object, decoupled from the React state reference.
+
+### R8 — Passage IDs unvalidated at YAML boundary 🔴 Open (deferred)
+`storyValidator.ts` accepts any string key from YAML as a passage ID. The editor and MobileEditorView enforce `/^[a-zA-Z0-9_-]+$/` on renames, but YAML-imported IDs bypass this. A passage ID containing special characters (e.g., `bad"].evil`) would break every `querySelector(`.node[data-id="${id}"]`)` call in `editor.js`.
+**Future fix:** Add passage ID format validation in `validateAndNormalizeStory()`.
+
+### R10 — Dual dark mode systems — maintenance trap 🔴 Open (partial)
+`editor-graph.css` uses only `@media (prefers-color-scheme: dark)` (14 blocks). `global.css` uses `html[data-theme]` overrides. The data-theme selectors win by specificity when set. No current visible bug — `global.css` covers all major editor-graph.css dark selectors — but adding any new dark-mode CSS to `editor-graph.css` via media query will silently break the manual theme toggle.
+**Future fix:** Migrate `editor-graph.css` dark blocks to `html[data-theme]` selectors for consistency.
+
+### R11 — Editor modal uses OS dark preference, ignores `data-theme` 🔴 Open (low)
+`showModal()` in `editor.js` checks `window.matchMedia('(prefers-color-scheme: dark)')` to set modal colors. It does not check `document.documentElement.dataset.theme`. User sets Light theme, OS is dark → modal appears with dark background inside a light-themed editor. Cosmetic only.
+**Future fix:** Check `data-theme` attribute first, fall back to media query.
+
+### R12 — Manual story file sync between `src/stories/` and `public/stories/` ✅ Fixed (2026-04-24)
+~~Files had to be manually kept in sync. Divergence would cause bundled stories and static-served stories to differ.~~
+**Fix:** Added `"prebuild": "cp src/stories/*.yaml public/stories/"` to `package.json`. Runs automatically before every `npm run build`.
+
+### R13 — CI deploys without running test suite ✅ Fixed (2026-04-24)
+~~`deploy-gh-pages.yml` ran `npm run build` but not `npm test`. Regressions in the condition parser or story validator would ship silently.~~
+**Fix:** Added `npm test` step between Install and Build in the CI workflow.
+
+---
+
 ## Audit methodology note
 
-Initial issue list produced by full static analysis in March 2026. Updated after all three phases (P1, P2, P3) completion. Updated again 2026-03-22 after Phase 4 (UI overhaul) and Phase 5 (inspector + diagnostics). Updated 2026-04-05 after Phase 9 post-launch fixes (player layout bugs U12–U13, story YAML bugs Y4–Y9). Issues numbered by category prefix (B = blocking/broken, U = UX, C = config/tooling, Y = YAML quality, S = styles). Original line numbers referenced the state at commit `f879a6d`.
+Initial issue list produced by full static analysis in March 2026. Updated after all three phases (P1, P2, P3) completion. Updated again 2026-03-22 after Phase 4 (UI overhaul) and Phase 5 (inspector + diagnostics). Updated 2026-04-05 after Phase 9 post-launch fixes (player layout bugs U12–U13, story YAML bugs Y4–Y9). Updated 2026-04-24 after full codebase audit (13-risk register; 5 fixed, 4 deferred). Issues numbered by category prefix (B = blocking/broken, U = UX, C = config/tooling, Y = YAML quality, S = styles, R = audit risk). Original line numbers referenced the state at commit `f879a6d`.

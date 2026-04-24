@@ -120,7 +120,7 @@ The header is a flex row:
 
 ## Known Issues
 
-All Phase 1–9 items are complete. No open issues remain. CSS @import ordering bug (S2) introduced by P3-2 was hotfixed 2026-03-19. Node inspector overlap (U4) fixed 2026-03-22. Inspector click reliability (U7/U8) fixed 2026-03-22. Choice editor in inspector, ID rename UX polish, and undo limit raised to 100 (P7, 2026-03-22). Mobile player: full-screen immersive layout, history bottom drawer, tap-to-skip typewriter (P8A, 2026-03-24). Mobile editor: passage-list mode on phones, MobileEditorView component, useIsMobile hook (P8B, 2026-03-24). Player layout grid bug and redundant status bar fixed (U12/U13, 2026-04-05). All four built-in stories audited and fixed: river_oath "take both" bug, city_noir informant dead-end, forest_adventure unused flags and dragon dead-end, space_outpost replaced with "Wreck of the Akaida" (P9, 2026-04-05).
+All Phase 1–9 items are complete. Audit-identified fixes shipped 2026-04-24: leaked keydown handler (RISK-1), `selectedNode` not cleared on destroy (RISK-2), auto-diagnostics timer not cancelled on destroy (RISK-3), CI test enforcement (RISK-13), and automated story file sync via prebuild script (RISK-12). Deferred: `window.storyData` shared reference (RISK-5), passage ID validation at YAML boundary (RISK-8), dark mode CSS unification (RISK-10). CSS @import ordering bug (S2) introduced by P3-2 was hotfixed 2026-03-19. Node inspector overlap (U4) fixed 2026-03-22. Inspector click reliability (U7/U8) fixed 2026-03-22. Choice editor in inspector, ID rename UX polish, and undo limit raised to 100 (P7, 2026-03-22). Mobile player: full-screen immersive layout, history bottom drawer, tap-to-skip typewriter (P8A, 2026-03-24). Mobile editor: passage-list mode on phones, MobileEditorView component, useIsMobile hook (P8B, 2026-03-24). Player layout grid bug and redundant status bar fixed (U12/U13, 2026-04-05). All four built-in stories audited and fixed: river_oath "take both" bug, city_noir informant dead-end, forest_adventure unused flags and dragon dead-end, space_outpost replaced with "Wreck of the Akaida" (P9, 2026-04-05).
 
 Full history: `known-issues.md`
 
@@ -222,7 +222,7 @@ Conditions support: `==`, `!=`, `>=`, `<=`, `>`, `<`, `&&`, `||`, `!`. Evaluated
 
 ### `src/legacy/editor.js`
 - ~3,100 lines of plain JS. Initialized via `initEditor()`, exported as named ES export.
-- `destroyEditor()` exported — removes all document event listeners, resets `editorEventsBound`
+- `destroyEditor()` exported — removes all document event listeners (including the global keydown shortcut handler), cancels the auto-diagnostics timer, clears `selectedNode`, and resets `editorEventsBound`
 - Calls `window.onStoryChange(storyData)` after every mutation and after undo/redo
 - `jsyaml.dump()` / `jsyaml.load()` both work — `js-yaml` imported at top of file
 - `_preservedSelectedId` — module-level variable; stores selected node ID before `initEditor()` re-runs and restores it after. Required because `saveState()` triggers `window.onStoryChange` → React re-render → `initEditor()`.
@@ -296,7 +296,8 @@ fonts:    playerSans, playerSerif
 ## CI/CD
 
 - Trigger: push to `master`
-- Steps: Node 22 → `npm install` → `npm run build` → deploy `./dist` to GitHub Pages
+- Steps: Node 22 → `npm install` → `npm test` → `npm run build` → deploy `./dist` to GitHub Pages
+- Tests: 105 tests (conditionEvaluator + storyValidator), ~4s. CI will fail the deploy if any test fails.
 - Token: `GITHUB_TOKEN`
 - Env: `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true` (silences GH Actions Node.js 20 deprecation warnings)
 
@@ -342,4 +343,8 @@ Branches follow `claude/<task-slug>-<session-id>`. Always push to the branch spe
 
 16. **`topStatus` only renders in editor mode** — `App.tsx` wraps `{topStatus}` with `{mode === 'editor' && topStatus}`. Do not render it unconditionally — it is redundant in player mode where the header already shows the loaded story (U13).
 
-17. **Adding a built-in story also requires copying to `public/stories/`** — `src/stories/` is bundled via `import.meta.glob`; `public/stories/` serves the raw YAML as a static asset. Both must be updated when adding or modifying a story file.
+17. **Story files are auto-synced by the prebuild script** — `package.json` has `"prebuild": "cp src/stories/*.yaml public/stories/"` which runs automatically before every `npm run build`. You only need to edit files in `src/stories/`; the prebuild step copies them to `public/stories/`. During local `npm run dev`, the sync does not run — if you need `public/stories/` to match during dev, run `npm run prebuild` manually.
+
+18. **`window.storyData` is intentionally the same object reference as React's `story` state.** `StoryEditor.tsx` sets `window.storyData = story` (no clone). The editor mutates `window.storyData.passages` directly, then calls `window.onStoryChange(storyData)`. The React side clones at notification time: `setStory(structuredClone(updated))`. Adding `structuredClone` at the assignment site (`window.storyData = structuredClone(story)`) breaks undo/redo — `applyStateIncremental()` writes restored passages onto `window.storyData.passages`, but the re-render replaces that object with a new clone, discarding the undo. See `decisions.md` Decision 8.
+
+19. **The global keydown handler (`_boundOnDocGlobalKeyDown`) is lifecycle-managed.** It is registered in `bindEditorEvents()` and removed in `destroyEditor()`. It must not be registered at module scope — doing so leaks the handler into player mode, where Delete/Backspace pops a `confirm()` dialog and Ctrl+S triggers an unwanted YAML export.

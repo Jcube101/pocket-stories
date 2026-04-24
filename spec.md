@@ -110,7 +110,7 @@ The validator blocks these variable name path segments to prevent prototype poll
 - The **node inspector** panel appears to the right of the canvas. Click any node (or press it — selection fires on `mousedown`) to open it. Shows passage ID, type, text editor, and a full per-choice breakdown: choice text, target (clickable jump link), condition (amber tag), effect (purple tag), plus status badges and char count.
 - **Split View** section: toggle Show Jump/Return edges, Critical Path highlight, Full Downstream highlight.
 - **Diagnostics**: validates story structure, detects cycles, flags unreachable and no-exit nodes. Also checks: missing title, empty passage text, long passages (>800 chars), self-loop choices, duplicate choice text, undeclared variable references. Auto-runs silently 1.2s after any edit.
-- Undo/redo (max 20 states in memory).
+- Undo/redo (max 100 states in memory).
 - Export: downloads current story state as a YAML file.
 - Import: accepts `.yaml`, `.yml`, `.json` files via file input.
 - Canvas layout is persisted to `localStorage` by story identity hash.
@@ -127,6 +127,7 @@ The React app exposes several functions on `window` so the legacy editor can cal
 |---|---|---|
 | `window.storyData` | `StoryEditor.tsx` | Current story data (mutable) |
 | `window.activeStoryId` | `StoryEditor.tsx` | Current story ID |
+| `window.onStoryChange(storyData)` | `StoryEditor.tsx` | Editor→React notification after mutations |
 | `window.setStoryStatus(msg, type)` | `StoryEditor.tsx` | Update the status bar |
 | `window.loadStoryByPath(path, label)` | `StoryEditor.tsx` | Load a story by path |
 | `window.validateAndNormalizeStory(raw)` | `App.tsx` | Validate + normalize a YAML story |
@@ -135,6 +136,13 @@ The React app exposes several functions on `window` so the legacy editor can cal
 | `window.setAppMode('editor'\|'player')` | `App.tsx` | Switch modes |
 | `window.setSidebarCollapsed(bool)` | `StoryEditor.tsx` | Collapse/expand the sidebar |
 | `window.toggleSidebarCollapsed()` | `StoryEditor.tsx` | Toggle sidebar state |
+| `window.storyParsers` | `App.tsx` | `{ parseCondition, parseEffect }` for diagnostics |
+
+#### Shared Reference Contract
+
+`window.storyData` is intentionally the **same object reference** as React's `story` state — not a clone. The editor mutates `window.storyData.passages` directly, then calls `window.onStoryChange(window.storyData)`. The React callback clones at notification time: `setStory(structuredClone(updated))`. This creates a React-owned copy, decoupled from the editor's ongoing mutations.
+
+The `structuredClone` must happen at notification time, not at the assignment site (`window.storyData = story`). Cloning at assignment breaks undo/redo: `applyStateIncremental()` writes restored passages onto `window.storyData.passages`, but the re-render replaces that object with a new clone, discarding the undo. See `decisions.md` Decision 8.
 
 ---
 
@@ -184,6 +192,7 @@ Tokens are defined as CSS custom properties in `player.css` and referenced by Ta
 
 - Static site, deployed to GitHub Pages at `https://Jcube101.github.io/pocket-stories/`
 - CI: GitHub Actions (`deploy-gh-pages.yml`) triggers on push to `master`
+- Tests: `npm test` runs 105 tests before build; deploy fails if any test fails
 - Build: `tsc && vite build` → output in `./dist`
 - Vite base path: `/pocket-stories/` (configurable via `VITE_BASE_PATH` env var; see `.env.example`)
 

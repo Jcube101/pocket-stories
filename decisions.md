@@ -131,6 +131,29 @@ Each entry follows the format: **Context → Options → Decision → Rationale*
 
 ---
 
+## Decision 8 — `window.storyData` is a shared mutable reference (not a clone)
+
+**Status: DECIDED — Shared reference retained; `structuredClone` at assignment site rejected (2026-04-24)**
+
+**Context:** `StoryEditor.tsx` sets `window.storyData = story` where `story` is the React state object. The editor mutates `window.storyData.passages` directly (adding choices, renaming nodes, auto-fixing). Then `saveState()` calls `window.onStoryChange(window.storyData)`, which invokes `setStory(structuredClone(updated))` in `StoryEditor.tsx`. The `structuredClone` at notification time creates a separate copy for React.
+
+Between editor mutations and the clone, React's `story` state and `window.storyData` point to the **same object**. This shared-reference window is sub-millisecond under React 18's batched updates.
+
+**Options considered:**
+- A) **Clone at assignment site.** `window.storyData = structuredClone(story)` in `StoryEditor.tsx`. Decouples the two objects completely.
+- B) **Keep shared reference.** Rely on the `structuredClone` at notification time to create the React-owned copy.
+- C) **Editor-owned state object.** Introduce a stable object that `editor.js` owns and React never touches. Undo/redo writes to this object; React receives clones via `onStoryChange`.
+
+**Decision:** Option B (shared reference retained). Option A was implemented and reverted.
+
+**Rationale:** Option A breaks undo/redo. The mechanism: `applyStateIncremental()` writes restored passages directly onto `window.storyData.passages`. The `onStoryChange` callback then triggers `setStory(structuredClone(window.storyData))`, which triggers a re-render. The re-render runs the `StoryEditor` effect, which executes `window.storyData = structuredClone(story)` — creating a **new** object. But `applyStateIncremental()` had already written to the previous clone. Each undo writes to an object that is immediately replaced, so undo appears to do nothing.
+
+Option C is the correct long-term fix — it requires a stable editor-owned state object that survives React re-renders — but it is a larger refactor that should be done alongside the editor modularization (Decision 1, Option B). Deferred to a future session.
+
+**Constraint:** Do not add `structuredClone` (or any other copy) at the `window.storyData = story` assignment site in `StoryEditor.tsx`. The clone **must** happen only at notification time, inside the `window.onStoryChange` callback.
+
+---
+
 ## Non-decisions (things deliberately left open)
 
 **Backend / server-side rendering:** Not under consideration. This is a static site tool. If backend requirements emerge (e.g., story sharing, user accounts), it warrants a separate architectural document.

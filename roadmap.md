@@ -1,6 +1,6 @@
 # Pocket Stories — Development Roadmap
 
-Last updated: 2026-04-05. Phases 1–8 complete; P5-3 and post-launch bug fixes done in session 2026-04-05. See `known-issues.md` for the full bug list and `decisions.md` for the architectural choices that shape this plan.
+Last updated: 2026-04-24. Phases 1–10 complete; codebase audit fixes shipped 2026-04-24. See `known-issues.md` for the full bug list and risk register, and `decisions.md` for the architectural choices that shape this plan.
 
 ---
 
@@ -371,12 +371,64 @@ Implemented 2026-04-05.
 
 ---
 
+## Phase 10 — Codebase Audit Fixes ✅ COMPLETE
+
+Implemented 2026-04-24 after a full 13-risk codebase audit. See `known-issues.md` for the complete risk register.
+
+### P10-1 Fix leaked keydown handler (RISK-1) — *DONE*
+
+- Anonymous `document.addEventListener('keydown', ...)` at module scope converted to named `_boundOnDocGlobalKeyDown`
+- Registered in `bindEditorEvents()`, removed in `destroyEditor()`
+- Prevents `confirm()` dialogs, stale data mutation, and unwanted YAML export in player mode
+
+### P10-2 Clean up `destroyEditor()` (RISK-2, RISK-3) — *DONE*
+
+- Added `selectedNode = null` — prevents reference to detached DOM element across mode switches
+- Added `clearTimeout(_autoDiagnosticsTimer); _autoDiagnosticsTimer = null` — prevents stale timer firing after editor unmount
+
+### P10-3 Add `npm test` to CI (RISK-13) — *DONE*
+
+- Added `npm test` step between Install and Build in `deploy-gh-pages.yml`
+- 105 tests, ~4s. CI now fails the deploy if any test regresses.
+
+### P10-4 Automate story file sync (RISK-12) — *DONE*
+
+- Added `"prebuild": "cp src/stories/*.yaml public/stories/"` to `package.json`
+- Runs automatically before every `npm run build`
+
+---
+
+## Future — Not yet scheduled
+
+Items identified by the 2026-04-24 audit that require larger design work.
+
+### F1 — Decouple `window.storyData` from React state (RISK-5)
+
+Introduce a stable editor-owned state object that `editor.js` owns and React never touches. Undo/redo writes to this object; React receives clones via `onStoryChange`. Required before the notification-time `structuredClone` can be safely removed. Should be done alongside editor modularization (Decision 1, Option B). See `decisions.md` Decision 8.
+
+### F2 — Validate passage IDs at YAML boundary (RISK-8)
+
+Add `/^[a-zA-Z0-9_-]+$/` check in `validateAndNormalizeStory()` for passage IDs. Currently only enforced in the editor rename UI. YAML-imported IDs bypass validation and can break `querySelector` calls.
+
+### F3 — Unify dark mode CSS (RISK-10)
+
+Migrate `editor-graph.css` dark blocks from `@media (prefers-color-scheme: dark)` to `html[data-theme]` selectors. Both systems currently coexist; the data-theme selectors win by specificity. No current bug, but a maintenance trap.
+
+### F4 — Fix modal dark mode to respect theme toggle (RISK-11)
+
+`showModal()` in `editor.js` uses `window.matchMedia` instead of checking `data-theme`. Cosmetic only — modal colors may not match the chosen theme.
+
+---
+
 ## Architectural Decisions
 
-See `decisions.md` for the five decisions that must be made before Phase 2 begins:
+See `decisions.md` for the eight decisions recorded to date:
 
 1. Editor integration strategy (keep legacy vs. incremental migration vs. rewrite)
 2. Condition evaluator approach (blocklist vs. expression parser vs. structured YAML)
 3. Story data ownership during editing (React vs. window vs. shared store)
 4. CSS architecture going forward (Tailwind-first vs. CSS Modules vs. status quo)
 5. Story file persistence model (static only vs. export/import vs. full localStorage)
+6. Canvas-wrapper layout strategy (`position: relative` with flex)
+7. Node selection event (`mousedown` vs. `click`)
+8. `window.storyData` shared reference (no clone at assignment site)
