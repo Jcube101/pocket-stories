@@ -962,6 +962,19 @@ function initEditor() {
     nodesContainer = document.getElementById('nodes-container');
     svgCanvas = document.getElementById('svg-canvas');
 
+    highlightedCycleNodes = new Set();
+    highlightedCycleEdges = new Set();
+    highlightedUnreachableNodes = new Set();
+    highlightedErrorNodes = new Set();
+    highlightedErrorEdges = new Set();
+    highlightedWarningNodes = new Set();
+    highlightedWarningEdges = new Set();
+    highlightedInfoNodes = new Set();
+    highlightedInfoEdges = new Set();
+    diagnosticsState = { issues: [], analyzers: {}, byNode: {} };
+    downstreamHighlight = { nodes: new Set(), edges: new Set() };
+    hoveredNodeId = null;
+
     // Clear previous content
     nodesContainer.innerHTML = '';
     svgCanvas.innerHTML = `<defs>
@@ -2421,8 +2434,8 @@ function showModal(content) {
     modal.style.borderRadius = '12px';
     modal.style.boxShadow = '0 6px 30px rgba(0,0,0,0.4)';
 
-    // Dark mode support
-    if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+    const effectiveTheme = document.documentElement.dataset.theme || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+    if (effectiveTheme === 'dark') {
         modal.style.background = '#1f2937';
         modal.style.color = '#f3f4f6';
     }

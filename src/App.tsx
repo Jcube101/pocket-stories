@@ -134,11 +134,14 @@ export default function App() {
     loadStory(activeStoryId);
   }, []);
 
+  const storiesRef = useRef(stories);
+  storiesRef.current = stories;
+
   useEffect(() => {
-    (window as any).registerImportedStoryEntry = async ({ id, label, raw, source }: BridgeStoryEntry) => {
+    (window as any).registerImportedStoryEntry ??= async ({ id, label, raw, source }: BridgeStoryEntry) => {
       if (!raw) return null;
 
-      const takenIds = new Set(stories.map((storyItem) => storyItem.id));
+      const takenIds = new Set(storiesRef.current.map((storyItem) => storyItem.id));
       const requestedId = normalizeStoryId(id || source || label || 'imported_story');
       const resolvedId = makeUniqueStoryId(requestedId, takenIds);
       const resolvedLabel = label?.trim() || source || resolvedId;
@@ -158,11 +161,7 @@ export default function App() {
       setPendingStoryId(resolvedId);
       return { id: resolvedId, label: resolvedLabel };
     };
-
-    return () => {
-      delete (window as any).registerImportedStoryEntry;
-    };
-  }, [stories]);
+  }, []);
 
   useEffect(() => {
     (window as any).setAppMode = (nextMode: 'editor' | 'player') => {

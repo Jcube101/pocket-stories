@@ -45,6 +45,15 @@
   .end-note { color: #cbd5e1; }
 }
 
+/* --- Auto light mode (OS preference — editor elements) ---
+   Overrides dark defaults in editor-graph.css for elements whose
+   base values assume a dark background. */
+@media (prefers-color-scheme: light) {
+  #svg-canvas text { fill: #1e293b; }
+  #variables h3 { border-bottom-color: rgba(0,0,0,0.1); }
+  #add-variable-form { border-top-color: rgba(0,0,0,0.15); }
+}
+
 /* --- Force dark theme (CSS custom properties — player UI) --- */
 html[data-theme="dark"] {
   --shadow-card: 0 28px 52px -26px rgba(2, 6, 23, 0.85);
@@ -171,3 +180,5 @@ html[data-theme="light"] #top-bar button,
 html[data-theme="light"] #top-bar label { background: #fff; border-color: #ccc; color: #333; }
 html[data-theme="light"] #choices button { background: #fff; color: #333; border-color: #cbd5e1; }
 html[data-theme="light"] .end-note { color: #666; }
+html[data-theme="light"] #variables h3 { border-bottom-color: rgba(0,0,0,0.1); }
+html[data-theme="light"] #add-variable-form { border-top-color: rgba(0,0,0,0.15); }
