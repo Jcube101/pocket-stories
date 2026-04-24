@@ -110,7 +110,11 @@ export function validateAndNormalizeStory(input: unknown): StoryValidationResult
   if (!isPlainObject(rawPassages)) return { ok: false, data: null, warnings, errors: ['Story must include passages map.'] };
 
   const normalizedPassages: StoryData['passages'] = {};
+  const PASSAGE_ID_PATTERN = /^[a-zA-Z0-9_-]+$/;
   Object.entries(rawPassages).forEach(([id, passage]) => {
+    if (!PASSAGE_ID_PATTERN.test(id)) {
+      warnings.push(`Passage "${id}": ID contains characters outside [a-zA-Z0-9_-] and may cause editor issues.`);
+    }
     if (!isPlainObject(passage) || typeof passage.text !== 'string') {
       errors.push(`Passage "${id}" invalid.`);
       return;

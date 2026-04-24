@@ -14,6 +14,37 @@
    'light' → html[data-theme="light"] → force light (overrides dark OS pref)
    ===================================== */
 
+/* --- Auto dark mode (OS preference — editor elements) ---
+   When data-theme is not set (auto mode), these provide dark styling.
+   html[data-theme="dark/light"] rules below take precedence when set. */
+@media (prefers-color-scheme: dark) {
+  #sidebar { background: linear-gradient(180deg, #121a24 0%, #111827 100%); border-right-color: #2a3544; }
+  .sidebar-section { background: rgba(17, 24, 39, 0.82); border-color: rgba(148, 163, 184, 0.18); }
+  #sidebar input[type="text"],
+  #sidebar select,
+  .file-upload-label { background: #0f172a; color: #e2e8f0; border-color: #334155; }
+  .story-status { color: #cbd5e1; }
+  #graph-container { background: #222; }
+  #canvas-wrapper::-webkit-scrollbar-track { background: rgba(255,255,255,0.05); }
+  #canvas-wrapper::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); }
+  #canvas-wrapper::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.4); }
+  .node { background: #333; border-color: #555; color: #eee; }
+  .connection-path { stroke: #aaa; }
+  .connection-path.selected { stroke: #4dabf7; }
+  .connection-path:hover { stroke: #4dabf7; }
+  .node[data-id="start"] { border-color: #34d399; box-shadow: 0 4px 20px rgba(52, 211, 153, 0.3); }
+  .node[data-id="start"] .node-title { background: rgba(52, 211, 153, 0.2); }
+  .start-badge { background: #34d399; }
+  .variable-remove { background: #f87171; }
+  .variable-remove:hover { background: #ef4444; }
+  #top-bar { background: #1f2937; border-bottom-color: #374151; }
+  #top-bar button,
+  #top-bar label { background: #111827; border-color: #374151; color: #f3f4f6; }
+  #passage-text { background: rgba(255,255,255,0.06); }
+  #choices button { background: #111827; color: #f3f4f6; border-color: #374151; }
+  .end-note { color: #cbd5e1; }
+}
+
 /* --- Force dark theme (CSS custom properties — player UI) --- */
 html[data-theme="dark"] {
   --shadow-card: 0 28px 52px -26px rgba(2, 6, 23, 0.85);
